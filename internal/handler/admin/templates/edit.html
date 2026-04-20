@@ -1,0 +1,60 @@
+{{define "content"}}
+<p>
+  <a href="/admin/announcements">← 一覧</a>
+  &nbsp;|&nbsp; ID: <code>{{.Announcement.AnnouncementID}}</code>
+  &nbsp;|&nbsp; 作成: <small>{{.Announcement.CreatedAt.Format "2006-01-02 15:04"}}</small>
+  &nbsp;|&nbsp; 更新: <small>{{.Announcement.UpdatedAt.Format "2006-01-02 15:04"}}</small>
+</p>
+
+<article>
+  <header><strong>本体属性</strong></header>
+  <form method="post" action="/admin/announcements/{{.Announcement.AnnouncementID}}">
+    <label>
+      種別
+      <select name="type" required>
+        {{$current := .Announcement.Type}}
+        {{range .Types}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <div class="grid">
+      <label>
+        公開開始 (空で下書き)
+        <input type="datetime-local" name="published_at" value="{{formatDatetimeLocal .Announcement.PublishedAt}}">
+      </label>
+      <label>
+        公開終了 (空で無期限)
+        <input type="datetime-local" name="expires_at" value="{{formatDatetimeLocal .Announcement.ExpiresAt}}">
+      </label>
+    </div>
+    <div class="grid">
+      <button type="submit">更新</button>
+      <button type="button"
+              hx-post="/admin/announcements/{{.Announcement.AnnouncementID}}/delete"
+              hx-confirm="削除しますか? (翻訳もすべて削除されます)"
+              class="secondary">削除</button>
+    </div>
+  </form>
+</article>
+
+{{range .Langs}}
+{{$lang := .}}
+{{$tr := findTranslation $.Translations $lang}}
+<article>
+  <header>
+    <strong>翻訳: {{$lang}}</strong>
+    {{if $tr}}<small>最終更新 {{$tr.UpdatedAt.Format "2006-01-02 15:04"}}</small>{{else}}<small><em>未作成</em></small>{{end}}
+  </header>
+  <form method="post" action="/admin/announcements/{{$.Announcement.AnnouncementID}}/translations/{{$lang}}">
+    <label>
+      タイトル
+      <input type="text" name="title" value="{{if $tr}}{{$tr.Title}}{{end}}" required maxlength="200">
+    </label>
+    <label>
+      本文
+      <textarea name="body" rows="15" required>{{if $tr}}{{$tr.Body}}{{end}}</textarea>
+    </label>
+    <button type="submit">{{if $tr}}更新{{else}}追加{{end}}</button>
+  </form>
+</article>
+{{end}}
+{{end}}

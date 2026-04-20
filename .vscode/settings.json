@@ -1,0 +1,24 @@
+{
+  "workbench.colorCustomizations": {
+    // --- ベースの背景色 ---
+    "editor.background": "#1e1e2e",
+    "sideBar.background": "#181825",
+
+    // --- タイトルバー（アクティブ）：知的なオールド・ローズ ---
+    "titleBar.activeBackground": "#ac7e7e", 
+    "titleBar.activeForeground": "#ffffff", 
+
+    // --- タイトルバー（非アクティブ） ---
+    "titleBar.inactiveBackground": "#ac7e7e88", 
+    "titleBar.inactiveForeground": "#ffffff88",
+
+    // --- ステータスバー（下のバー） ---
+    "statusBar.background": "#ac7e7e",
+    "statusBar.foreground": "#ffffff",
+
+    // --- その他のアクセント ---
+    "activityBar.foreground": "#ac7e7e",      
+    "editorCursor.foreground": "#ac7e7e",      
+    "tab.activeBorder": "#ac7e7e"             
+  }
+}

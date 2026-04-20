@@ -1,0 +1,36 @@
+{{define "content"}}
+<nav>
+  <ul>
+    <li><strong>絞り込み:</strong></li>
+    <li><a href="/admin/announcements"{{if eq .ActiveStatus ""}} aria-current="page"{{end}}>all</a></li>
+    <li><a href="/admin/announcements?status=draft"{{if eq .ActiveStatus "draft"}} aria-current="page"{{end}}>draft</a></li>
+    <li><a href="/admin/announcements?status=scheduled"{{if eq .ActiveStatus "scheduled"}} aria-current="page"{{end}}>scheduled</a></li>
+    <li><a href="/admin/announcements?status=published"{{if eq .ActiveStatus "published"}} aria-current="page"{{end}}>published</a></li>
+    <li><a href="/admin/announcements?status=expired"{{if eq .ActiveStatus "expired"}} aria-current="page"{{end}}>expired</a></li>
+  </ul>
+  <ul>
+    <li><a href="/admin/announcements/new" role="button">+ 新規作成</a></li>
+  </ul>
+</nav>
+
+{{if not .Items}}
+  <p><em>該当するお知らせがありません。</em></p>
+{{else}}
+<table>
+  <thead>
+    <tr>
+      <th>作成</th>
+      <th>type</th>
+      <th>タイトル (ja)</th>
+      <th>翻訳</th>
+      <th>state</th>
+      <th>公開</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Items}}{{template "row" .}}{{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}

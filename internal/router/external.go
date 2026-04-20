@@ -1,0 +1,49 @@
+package router
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/kenyamaneko/overload-party-support/internal/handler/external"
+)
+
+// NewExternal は問い合わせフォーム (:9209) 向けの公開ルータを構築する。
+// CORS で指定 Origin のみ受け入れ、認証は掛けない (FEATURE_SPEC §7.5)。
+func NewExternal(allowedOrigins []string, inq *external.InquiryHandler) *gin.Engine {
+	r := gin.New()
+	r.Use(requestLogger(), gin.Recovery())
+	r.Use(corsMiddleware(allowedOrigins))
+
+	r.GET("/health", healthHandler)
+
+	v1 := r.Group("/api/v1")
+	{
+		v1.POST("/inquiries", inq.Submit)
+	}
+	return r
+}
+
+// corsMiddleware は許可オリジンのみ Access-Control-Allow-Origin を返す。
+// プリフライト (OPTIONS) にも 204 で応答する。
+func corsMiddleware(allowed []string) gin.HandlerFunc {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, o := range allowed {
+		allowedSet[o] = struct{}{}
+	}
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if _, ok := allowedSet[origin]; ok {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Content-Type")
+			c.Header("Access-Control-Max-Age", "600")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
