@@ -17,7 +17,7 @@ import (
 // compile-time assertion: AnnouncementRepository が 2 つの port を満たす。
 var (
 	_ port.AnnouncementQuerier = (*AnnouncementRepository)(nil)
-	_ port.AnnouncementAdmin   = (*AnnouncementRepository)(nil)
+	_ port.AnnouncementRepository = (*AnnouncementRepository)(nil)
 )
 
 // AnnouncementRepository は support.announcements + announcement_translations への CRUD を提供する。
@@ -96,8 +96,8 @@ func (r *AnnouncementRepository) ListPublished(ctx context.Context, lang string,
 	return items, nil
 }
 
-// ListAll は state 絞り込みを適用した一覧 + 全翻訳を返す。state == nil は全件。
-func (r *AnnouncementRepository) ListAll(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error) {
+// List は state 絞り込みを適用した一覧 + 全翻訳を返す。state == nil は全件。
+func (r *AnnouncementRepository) List(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error) {
 	var query string
 	var args []any
 	switch {

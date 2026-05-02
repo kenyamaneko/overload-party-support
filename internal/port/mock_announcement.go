@@ -7,12 +7,12 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
-// MockAnnouncementRepo は AnnouncementQuerier / AnnouncementAdmin を両方実装するテスト用モック。
+// MockAnnouncementRepo は AnnouncementQuerier / AnnouncementRepository を両方実装するテスト用モック。
 // 必要な Fn フィールドだけ埋めて使い、未設定のメソッド呼び出しは panic で意図しない呼び出しを検出する。
 type MockAnnouncementRepo struct {
 	ListPublishedFn      func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error)
 	GetPublishedDetailFn func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error)
-	ListAllFn             func(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
+	ListFn               func(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
 	GetWithTranslationsFn func(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error)
 	CreateFn             func(ctx context.Context, params domain.CreateAnnouncementParams) (int64, error)
 	UpdateFn             func(ctx context.Context, announcementID int64, params domain.UpdateAnnouncementParams) error
@@ -22,7 +22,7 @@ type MockAnnouncementRepo struct {
 
 var (
 	_ AnnouncementQuerier = (*MockAnnouncementRepo)(nil)
-	_ AnnouncementAdmin   = (*MockAnnouncementRepo)(nil)
+	_ AnnouncementRepository = (*MockAnnouncementRepo)(nil)
 )
 
 func (m *MockAnnouncementRepo) ListPublished(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
@@ -39,11 +39,11 @@ func (m *MockAnnouncementRepo) GetPublishedDetail(ctx context.Context, announcem
 	return m.GetPublishedDetailFn(ctx, announcementID, lang)
 }
 
-func (m *MockAnnouncementRepo) ListAll(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error) {
-	if m.ListAllFn == nil {
-		panic("MockAnnouncementRepo.ListAll called without Fn")
+func (m *MockAnnouncementRepo) List(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error) {
+	if m.ListFn == nil {
+		panic("MockAnnouncementRepo.List called without Fn")
 	}
-	return m.ListAllFn(ctx, state, now)
+	return m.ListFn(ctx, state, now)
 }
 
 func (m *MockAnnouncementRepo) GetWithTranslations(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error) {

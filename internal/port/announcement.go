@@ -16,10 +16,10 @@ type AnnouncementQuerier interface {
 	GetPublishedDetail(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error)
 }
 
-// AnnouncementAdmin は管理 UI (:9109) 向けの CRUD port。
-type AnnouncementAdmin interface {
-	// ListAll は state 絞り込みを適用した一覧を返す。state == nil は全件。
-	ListAll(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
+// AnnouncementRepository はお知らせの永続装置への CRUD port。
+type AnnouncementRepository interface {
+	// List は state 絞り込みを適用した一覧を返す。state == nil は全件。
+	List(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
 
 	// GetWithTranslations は ID でお知らせ本体 + 全言語翻訳を返す。
 	GetWithTranslations(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error)

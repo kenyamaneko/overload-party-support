@@ -247,8 +247,8 @@ func TestListPublished_Order(t *testing.T) {
 	assert.Equal(t, []int64{id3, id2, id1b, id1a}, gotIDs)
 }
 
-// 仕様 (FEATURE_SPEC §6.3): ListAll の state 絞り込み。
-func TestListAll(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.3): List の state 絞り込み。
+func TestList(t *testing.T) {
 	draft := domain.StateDraft
 	scheduled := domain.StateScheduled
 	published := domain.StatePublished
@@ -325,7 +325,7 @@ func TestListAll(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			items, err := repo.ListAll(ctx, tc.state, fixedNow)
+			items, err := repo.List(ctx, tc.state, fixedNow)
 			require.NoError(t, err)
 
 			titles := make([]string, 0, len(items))

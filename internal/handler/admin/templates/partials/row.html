@@ -1,7 +1,7 @@
 {{define "row"}}<tr id="row-{{.Announcement.AnnouncementID}}">
   <td><small>{{.Announcement.CreatedAt.Format "2006-01-02 15:04"}}</small></td>
   <td><code>{{.Announcement.Type}}</code></td>
-  <td>{{if .DisplayTitle}}<a href="/admin/announcements/{{.Announcement.AnnouncementID}}">{{.DisplayTitle}}</a>{{else}}<a href="/admin/announcements/{{.Announcement.AnnouncementID}}"><em>[ja 未作成]</em></a>{{end}}</td>
+  <td>{{if .JaTitle}}<a href="/admin/announcements/{{.Announcement.AnnouncementID}}">{{.JaTitle}}</a>{{else}}<a href="/admin/announcements/{{.Announcement.AnnouncementID}}"><em>[ja 未作成]</em></a>{{end}}</td>
   <td><small>{{.LangsLabel}}</small></td>
   <td><code>{{.State}}</code></td>
   <td><small>{{if .Announcement.PublishedAt}}{{.Announcement.PublishedAt.Format "2006-01-02 15:04"}}{{else}}—{{end}}</small></td>

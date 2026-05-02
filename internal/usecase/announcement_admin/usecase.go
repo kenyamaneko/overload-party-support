@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
+	"github.com/kenyamaneko/overload-party-support/internal/port"
 )
 
 const (
@@ -17,54 +17,13 @@ const (
 
 // Usecase は管理 UI のお知らせ CRUD ユースケースを担う。
 type Usecase struct {
-	admin port.AnnouncementAdmin
-	now   func() time.Time
+	repo port.AnnouncementRepository
+	now  func() time.Time
 }
 
 // New は Usecase を構築する。
-func New(admin port.AnnouncementAdmin, now func() time.Time) *Usecase {
-	return &Usecase{admin: admin, now: now}
-}
-
-// List は管理 UI の一覧取得。filter が空文字 / "all" の場合は全件。
-func (u *Usecase) List(ctx context.Context, filter string) ([]domain.AnnouncementWithTranslations, error) {
-	state, err := parseStateFilter(filter)
-	if err != nil {
-		return nil, err
-	}
-	items, err := u.admin.ListAll(ctx, state, u.now())
-	if err != nil {
-		return nil, fmt.Errorf("list all: %w", err)
-	}
-	return items, nil
-}
-
-// DeriveState は本体属性から state を導出する。
-// 判定順序が排他性を担保する (PublishedAt IS NULL を最初に判定するため、
-// PublishedAt=NULL ∧ ExpiresAt<=now の record は Expired ではなく Draft になる)。
-func DeriveState(a domain.Announcement, now time.Time) string {
-	if a.PublishedAt == nil {
-		return domain.StateDraft
-	}
-	if a.PublishedAt.After(now) {
-		return domain.StateScheduled
-	}
-	if a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
-		return domain.StateExpired
-	}
-	return domain.StatePublished
-}
-
-// Get は ID 指定の編集画面向け取得。
-func (u *Usecase) Get(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error) {
-	got, err := u.admin.GetWithTranslations(ctx, announcementID)
-	if err != nil {
-		if errors.Is(err, port.ErrNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("get: %w", err)
-	}
-	return got, nil
+func New(repo port.AnnouncementRepository, now func() time.Time) *Usecase {
+	return &Usecase{repo: repo, now: now}
 }
 
 // Create は新規作成。
@@ -90,11 +49,52 @@ func (u *Usecase) Create(ctx context.Context, params domain.CreateAnnouncementPa
 		return 0, ErrInvalidField
 	}
 
-	id, err := u.admin.Create(ctx, params)
+	id, err := u.repo.Create(ctx, params)
 	if err != nil {
 		return 0, fmt.Errorf("create: %w", err)
 	}
 	return id, nil
+}
+
+// List は管理 UI の一覧取得。filter が空文字 / "all" の場合は全件。
+func (u *Usecase) List(ctx context.Context, filter string) ([]domain.AnnouncementWithTranslations, error) {
+	state, err := parseStateFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	items, err := u.repo.List(ctx, state, u.now())
+	if err != nil {
+		return nil, fmt.Errorf("list: %w", err)
+	}
+	return items, nil
+}
+
+// Get は ID 指定の編集画面向け取得。
+func (u *Usecase) Get(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error) {
+	got, err := u.repo.GetWithTranslations(ctx, announcementID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get: %w", err)
+	}
+	return got, nil
+}
+
+// DeriveState は本体属性から state を導出する。
+// 判定順序が排他性を担保する (PublishedAt IS NULL を最初に判定するため、
+// PublishedAt=NULL ∧ ExpiresAt<=now の record は Expired ではなく Draft になる)。
+func DeriveState(a domain.Announcement, now time.Time) string {
+	if a.PublishedAt == nil {
+		return domain.StateDraft
+	}
+	if a.PublishedAt.After(now) {
+		return domain.StateScheduled
+	}
+	if a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
+		return domain.StateExpired
+	}
+	return domain.StatePublished
 }
 
 // Update は本体属性を更新する。
@@ -102,7 +102,7 @@ func (u *Usecase) Update(ctx context.Context, announcementID int64, params domai
 	if !domain.IsSupportedType(params.Type) {
 		return ErrInvalidType
 	}
-	err := u.admin.Update(ctx, announcementID, params)
+	err := u.repo.Update(ctx, announcementID, params)
 	if err != nil {
 		if errors.Is(err, port.ErrNotFound) {
 			return ErrNotFound
@@ -112,29 +112,29 @@ func (u *Usecase) Update(ctx context.Context, announcementID int64, params domai
 	return nil
 }
 
-// Delete はお知らせを削除する。翻訳は FK CASCADE で同時削除。
-func (u *Usecase) Delete(ctx context.Context, announcementID int64) error {
-	err := u.admin.Delete(ctx, announcementID)
-	if err != nil {
-		if errors.Is(err, port.ErrNotFound) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("delete: %w", err)
-	}
-	return nil
-}
-
 // UpsertTranslation は翻訳を INSERT / UPDATE する。
 func (u *Usecase) UpsertTranslation(ctx context.Context, announcementID int64, lang, title, body string) error {
 	if err := validateTranslationFields(lang, title, body); err != nil {
 		return err
 	}
-	err := u.admin.UpsertTranslation(ctx, announcementID, lang, title, body)
+	err := u.repo.UpsertTranslation(ctx, announcementID, lang, title, body)
 	if err != nil {
 		if errors.Is(err, port.ErrNotFound) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("upsert translation: %w", err)
+	}
+	return nil
+}
+
+// Delete はお知らせを削除する。翻訳は FK CASCADE で同時削除。
+func (u *Usecase) Delete(ctx context.Context, announcementID int64) error {
+	err := u.repo.Delete(ctx, announcementID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("delete: %w", err)
 	}
 	return nil
 }

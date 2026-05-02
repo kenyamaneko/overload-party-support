@@ -17,9 +17,9 @@ func NewAdmin(env config.Env, adminH *admin.Handler) *gin.Engine {
 	adminGroup := r.Group("/admin", admin.AuthMiddleware(env))
 	{
 		adminGroup.GET("/announcements", adminH.List)
-		adminGroup.GET("/announcements/new", adminH.NewForm)
+		adminGroup.GET("/announcements/new", adminH.ShowNew)
 		adminGroup.POST("/announcements", adminH.Create)
-		adminGroup.GET("/announcements/:announcementId", adminH.GetEdit)
+		adminGroup.GET("/announcements/:announcementId", adminH.ShowEdit)
 		adminGroup.POST("/announcements/:announcementId", adminH.Update)
 		adminGroup.POST("/announcements/:announcementId/delete", adminH.Delete)
 		adminGroup.POST("/announcements/:announcementId/translations/:lang", adminH.UpsertTranslation)
