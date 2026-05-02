@@ -19,9 +19,8 @@ var fixedNow = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 
 func nowFixed() time.Time { return fixedNow }
 
-// 仕様 (FEATURE_SPEC §6.1 / §6.3): List は既知の status クエリ値を *AnnouncementState に変換して repo に渡す。
-// 空文字 / "all" は nil (全件)、それ以外の既知値は対応する state を指す pointer に変換される。
-func TestList_仕様_フィルタパース(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.1 / §6.3): List は status クエリ値を *AnnouncementState に変換して repo に渡す。
+func TestList_FilterParsing(t *testing.T) {
 	draft := domain.StateDraft
 	scheduled := domain.StateScheduled
 	published := domain.StatePublished
@@ -82,7 +81,7 @@ func TestList_仕様_フィルタパース(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §6.1 / §6.3): 未知の status クエリ値は ErrInvalidStatusFilter を返し、repo は呼ばれない。
-func TestList_仕様_未知値はErrInvalidStatusFilter(t *testing.T) {
+func TestList_UnknownFilter(t *testing.T) {
 	// ListAllFn を未設定にすることで、呼ばれた瞬間に panic して「呼ばれていない」ことを担保する (MockAnnouncementRepo 契約)。
 	repo := &port.MockAnnouncementRepo{}
 	_, err := announcementadmin.New(repo, nowFixed).List(context.Background(), "invalid")
@@ -92,7 +91,7 @@ func TestList_仕様_未知値はErrInvalidStatusFilter(t *testing.T) {
 
 // 仕様 (FEATURE_SPEC §6.3): DeriveState は (PublishedAt, ExpiresAt) と now から state を一意に導出する。
 // 判定順序が排他性を担保している。特に PublishedAt IS NULL の record は ExpiresAt の値に依存せず Draft。
-func TestDeriveState_仕様_state導出(t *testing.T) {
+func TestDeriveState(t *testing.T) {
 	past := fixedNow.Add(-time.Hour)
 	future := fixedNow.Add(time.Hour)
 
@@ -152,10 +151,7 @@ func TestDeriveState_仕様_state導出(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §6.4 / §6.6): Create は type と翻訳群をバリデートする。
-//   - ja 翻訳が少なくとも 1 件必須
-//   - 各翻訳は lang が対応言語 / title 非空 / title <= 200 / body 非空
-//   - lang の重複は不可
-func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
+func TestCreate_Validation(t *testing.T) {
 	cases := []struct {
 		name     string
 		params   domain.CreateAnnouncementParams
@@ -316,7 +312,7 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §6.4): Create はバリデーション通過後、翻訳群をそのまま port に転送する。
-func TestCreate_仕様_翻訳群をportに転送(t *testing.T) {
+func TestCreate_ForwardsTranslations(t *testing.T) {
 	var got domain.CreateAnnouncementParams
 	repo := &port.MockAnnouncementRepo{
 		CreateFn: func(_ context.Context, p domain.CreateAnnouncementParams) (int64, error) {
@@ -341,13 +337,8 @@ func TestCreate_仕様_翻訳群をportに転送(t *testing.T) {
 	}, got.Translations)
 }
 
-// 仕様: Update は repo のエラーを以下にマップする。
-//   - port.ErrNotFound → service の ErrNotFound (sentinel 入れ替え)
-//   - その他のエラー → %w でラップして透過 (errors.Is で元 err に到達可能)
-//   - nil → nil
-//
-// errors.Is は wrap チェーンを辿って一致を見るので、透過ケースでも repoErr を target にして検出できる。
-func TestUpdate_仕様_repoエラーマッピング(t *testing.T) {
+// 仕様: Update は repo のエラーをセンチネルにマップ (port.ErrNotFound → usecase.ErrNotFound、それ以外は %w で透過)。
+func TestUpdate(t *testing.T) {
 	dbErr := errors.New("db")
 
 	cases := []struct {
@@ -361,7 +352,7 @@ func TestUpdate_仕様_repoエラーマッピング(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:    "port.ErrNotFound は service ErrNotFound にマップ",
+			name:    "port.ErrNotFound は usecase ErrNotFound にマップ",
 			repoErr: port.ErrNotFound,
 			wantErr: announcementadmin.ErrNotFound,
 		},
@@ -386,7 +377,7 @@ func TestUpdate_仕様_repoエラーマッピング(t *testing.T) {
 }
 
 // 仕様: Delete も Update と同じ repo エラーマッピング規約。
-func TestDelete_仕様_repoエラーマッピング(t *testing.T) {
+func TestDelete(t *testing.T) {
 	dbErr := errors.New("db")
 
 	cases := []struct {
@@ -400,7 +391,7 @@ func TestDelete_仕様_repoエラーマッピング(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:    "port.ErrNotFound は service ErrNotFound にマップ",
+			name:    "port.ErrNotFound は usecase ErrNotFound にマップ",
 			repoErr: port.ErrNotFound,
 			wantErr: announcementadmin.ErrNotFound,
 		},
@@ -425,7 +416,7 @@ func TestDelete_仕様_repoエラーマッピング(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §6.5 / §6.6): UpsertTranslation は lang / title / body をバリデートする。
-func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
+func TestUpsertTranslation_Validation(t *testing.T) {
 	cases := []struct {
 		name     string
 		lang     string
@@ -494,8 +485,7 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 }
 
 // 仕様: Get も Update / Delete と同じ repo エラーマッピング規約。
-// 成功ケースは repo が返した値をそのまま service が返す (mock は非 nil の結果を返す)。
-func TestGet_仕様_repoエラーマッピング(t *testing.T) {
+func TestGet(t *testing.T) {
 	dbErr := errors.New("db lost")
 	okResult := &domain.AnnouncementWithTranslations{
 		Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo},
@@ -514,7 +504,7 @@ func TestGet_仕様_repoエラーマッピング(t *testing.T) {
 			wantErr:    nil,
 		},
 		{
-			name:       "port.ErrNotFound は service ErrNotFound にマップ",
+			name:       "port.ErrNotFound は usecase ErrNotFound にマップ",
 			repoResult: nil,
 			repoErr:    port.ErrNotFound,
 			wantErr:    announcementadmin.ErrNotFound,
@@ -540,8 +530,8 @@ func TestGet_仕様_repoエラーマッピング(t *testing.T) {
 	}
 }
 
-// 仕様: UpsertTranslation は repo の ErrNotFound を service の ErrNotFound にマップする。
-func TestUpsertTranslation_仕様_NotFoundマップ(t *testing.T) {
+// 仕様: UpsertTranslation は repo の ErrNotFound を usecase の ErrNotFound にマップする。
+func TestUpsertTranslation_NotFound(t *testing.T) {
 	repo := &port.MockAnnouncementRepo{
 		UpsertTranslationFn: func(_ context.Context, _ int64, _ string, _ string, _ string) error {
 			return port.ErrNotFound

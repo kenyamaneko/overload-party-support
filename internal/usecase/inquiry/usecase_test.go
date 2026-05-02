@@ -15,8 +15,8 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
-// 仕様 (FEATURE_SPEC §7.1): Submit は必須・長さ・email 形式をバリデートし、失敗時は repo/slack/email を呼ばない。
-func TestSubmit_仕様_入力バリデーション(t *testing.T) {
+// 仕様 (FEATURE_SPEC §7.1): Submit はバリデーション失敗時に副作用 (repo/slack/email) を一切呼ばない。
+func TestSubmit_InputValidation(t *testing.T) {
 	cases := []struct {
 		name     string
 		title    string
@@ -125,52 +125,51 @@ func TestSubmit_仕様_入力バリデーション(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §7.1 / §7.3): Submit は DB → Slack → SendGrid の順で fail-fast。
-// Slack 失敗時は SendGrid を呼ばない、DB 失敗時は Slack を呼ばない。
-func TestSubmit_仕様_副作用はfailfast(t *testing.T) {
+func TestSubmit_FailFastSideEffects(t *testing.T) {
 	dbErr := errors.New("db lost")
 	slackErr := errors.New("slack 500")
 	sendErr := errors.New("sendgrid 500")
 
 	cases := []struct {
-		name            string
-		createErr       error
-		slackErr        error
-		sendErr         error
-		wantCreateCall  bool
-		wantSlackCall   bool
-		wantEmailCall   bool
-		wantErrContains string
+		name           string
+		createErr      error
+		slackErr       error
+		sendErr        error
+		wantCreateCall bool
+		wantSlackCall  bool
+		wantEmailCall  bool
+		wantErr        error
 	}{
 		{
-			name:            "DB 失敗 → slack/email 呼ばない",
-			createErr:       dbErr,
-			wantCreateCall:  true,
-			wantSlackCall:   false,
-			wantEmailCall:   false,
-			wantErrContains: "db lost",
+			name:           "DB 失敗 → slack/email 呼ばない",
+			createErr:      dbErr,
+			wantCreateCall: true,
+			wantSlackCall:  false,
+			wantEmailCall:  false,
+			wantErr:        dbErr,
 		},
 		{
-			name:            "Slack 失敗 → email 呼ばない",
-			slackErr:        slackErr,
-			wantCreateCall:  true,
-			wantSlackCall:   true,
-			wantEmailCall:   false,
-			wantErrContains: "slack 500",
+			name:           "Slack 失敗 → email 呼ばない",
+			slackErr:       slackErr,
+			wantCreateCall: true,
+			wantSlackCall:  true,
+			wantEmailCall:  false,
+			wantErr:        slackErr,
 		},
 		{
-			name:            "SendGrid 失敗 → エラーを透過",
-			sendErr:         sendErr,
-			wantCreateCall:  true,
-			wantSlackCall:   true,
-			wantEmailCall:   true,
-			wantErrContains: "sendgrid 500",
+			name:           "SendGrid 失敗 → エラーを透過",
+			sendErr:        sendErr,
+			wantCreateCall: true,
+			wantSlackCall:  true,
+			wantEmailCall:  true,
+			wantErr:        sendErr,
 		},
 		{
-			name:            "全部成功",
-			wantCreateCall:  true,
-			wantSlackCall:   true,
-			wantEmailCall:   true,
-			wantErrContains: "",
+			name:           "全部成功",
+			wantCreateCall: true,
+			wantSlackCall:  true,
+			wantEmailCall:  true,
+			wantErr:        nil,
 		},
 	}
 
@@ -205,19 +204,13 @@ func TestSubmit_仕様_副作用はfailfast(t *testing.T) {
 			assert.Equal(t, tc.wantCreateCall, createCalled, "create called")
 			assert.Equal(t, tc.wantSlackCall, slackCalled, "slack called")
 			assert.Equal(t, tc.wantEmailCall, emailCalled, "email called")
-			switch tc.wantErrContains {
-			case "":
-				assert.NoError(t, err)
-			default:
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErrContains)
-			}
+			assert.ErrorIs(t, err, tc.wantErr)
 		})
 	}
 }
 
 // 仕様 (FEATURE_SPEC §7.1 / §9.1): Slack 通知の snippet は body を先頭 N 文字に切り詰めて渡す。
-func TestSubmit_仕様_snippetは指定文字数(t *testing.T) {
+func TestSubmit_SnippetLength(t *testing.T) {
 	cases := []struct {
 		name        string
 		body        string
@@ -273,12 +266,8 @@ func TestSubmit_仕様_snippetは指定文字数(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.1): ステータス遷移表を厳密に守る。
-// - `new` への遷移は常に不可 (server 初期値のみ)
-// - `closed` からの逆遷移は不可
-// - `new` → `in_progress` / `closed` OK
-// - `in_progress` → `closed` OK, `new` への戻しは不可
-func TestUpdateStatus_仕様_遷移表(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.1): ステータス遷移表を厳密に守る (new への遷移は server 初期値のみで常に不可)。
+func TestUpdateStatus_TransitionTable(t *testing.T) {
 	cases := []struct {
 		name      string
 		current   string
@@ -368,8 +357,8 @@ func TestUpdateStatus_仕様_遷移表(t *testing.T) {
 	}
 }
 
-// 仕様: UpdateStatus は未知の status 値を ErrInvalidStatusValue、非存在を ErrNotFound にマップする。
-func TestUpdateStatus_仕様_エラーマッピング(t *testing.T) {
+// 仕様: UpdateStatus はエラー種別をセンチネルにマップする。
+func TestUpdateStatus_ErrorMapping(t *testing.T) {
 	cases := []struct {
 		name    string
 		target  string
@@ -414,7 +403,7 @@ func TestUpdateStatus_仕様_エラーマッピング(t *testing.T) {
 }
 
 // 仕様: UpdateNote は nil / 空文字を同一視してメモ削除扱いにする。
-func TestUpdateNote_仕様_空文字は削除扱い(t *testing.T) {
+func TestUpdateNote(t *testing.T) {
 	empty := ""
 	nonEmpty := "対応中: 追加情報待ち"
 
@@ -456,20 +445,13 @@ func TestUpdateNote_仕様_空文字は削除扱い(t *testing.T) {
 			_, err := inquiry.New(store, slack, email, 200).UpdateNote(context.Background(), 1, tc.input)
 
 			require.NoError(t, err)
-			switch {
-			case tc.wantPass == nil:
-				assert.Nil(t, gotNote)
-			default:
-				require.NotNil(t, gotNote)
-				assert.Equal(t, *tc.wantPass, *gotNote)
-			}
+			assert.Equal(t, tc.wantPass, gotNote)
 		})
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.3): List は status クエリをパースし、未知値を ErrInvalidStatusValue として早期 fail する。
-// 指定なし (nil / 空文字のみ) は domain.Statuses (全 Status) に展開して repo に渡す。
-func TestList_仕様_statusパース(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): List は status クエリをパースし、指定なし (nil / 空文字のみ) は domain.Statuses (全 Status) に展開して repo に渡す。
+func TestList(t *testing.T) {
 	allLen := len(domain.Statuses)
 
 	cases := []struct {
@@ -544,8 +526,8 @@ func TestList_仕様_statusパース(t *testing.T) {
 	}
 }
 
-// 仕様: Get は port.ErrNotFound を service の ErrNotFound にマップ、それ以外は透過。
-func TestGet_仕様_NotFoundマップ(t *testing.T) {
+// 仕様: Get は port.ErrNotFound を usecase の ErrNotFound にマップ、それ以外は透過。
+func TestGet(t *testing.T) {
 	dbErr := errors.New("db lost")
 
 	cases := []struct {
@@ -583,19 +565,13 @@ func TestGet_仕様_NotFoundマップ(t *testing.T) {
 			}
 			_, err := inquiry.New(store, nil, nil, 200).Get(context.Background(), 1)
 
-			switch tc.wantErr {
-			case nil:
-				assert.NoError(t, err)
-			default:
-				assert.ErrorContains(t, err, errMessage(tc.wantErr))
-			}
+			assert.ErrorIs(t, err, tc.wantErr)
 		})
 	}
 }
 
-// 仕様: UpdateStatus / UpdateNote は更新時の port.ErrNotFound も ErrNotFound にマップする。
-// (GetFn 段階の NotFound は別ケースで検証済み。ここは Get 成功後に UpdateStatusFn / UpdateNoteFn が NotFound を返すレース)
-func TestUpdateStatusNote_仕様_書き込み時のNotFound(t *testing.T) {
+// 仕様: UpdateStatus / UpdateNote は書き込み時の port.ErrNotFound も usecase の ErrNotFound にマップする。
+func TestUpdateStatusOrNote_WriteNotFound(t *testing.T) {
 	cases := []struct {
 		name        string
 		run         func(uc *inquiry.Usecase) error
@@ -643,14 +619,6 @@ func TestUpdateStatusNote_仕様_書き込み時のNotFound(t *testing.T) {
 			assert.ErrorIs(t, err, inquiry.ErrNotFound)
 		})
 	}
-}
-
-// errMessage はエラーメッセージを取り出す (センチネル・一般 error どちらも扱うための helper)。
-func errMessage(e error) string {
-	if e == nil {
-		return ""
-	}
-	return e.Error()
 }
 
 func newInquiry(id int64, status string) *domain.Inquiry {

@@ -28,8 +28,8 @@ func newExternalEngine(h *external.InquiryHandler) *gin.Engine {
 	return r
 }
 
-// 仕様 (FEATURE_SPEC §7.1 / API_REFERENCE): Submit はバリデーション失敗で 400、副作用失敗で 500。
-func TestSubmit_仕様_HTTPマッピング(t *testing.T) {
+// 仕様 (FEATURE_SPEC §7.1 / API_REFERENCE): Submit はエラー種別を HTTP ステータスにマップする。
+func TestSubmit_HTTPMapping(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
@@ -92,8 +92,8 @@ func TestSubmit_仕様_HTTPマッピング(t *testing.T) {
 	}
 }
 
-// 仕様: 成功レスポンスは {"inquiry_id": <number>} 形式で、受付確認メールに使える ID を含む。
-func TestSubmit_仕様_成功レスポンス(t *testing.T) {
+// 仕様: 成功レスポンスに採番された inquiry_id を含む (受付確認メール用)。
+func TestSubmit_SuccessResponse(t *testing.T) {
 	store := &port.MockInquiryStore{
 		CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
 			return &domain.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil

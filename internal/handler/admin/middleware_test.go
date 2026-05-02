@@ -13,9 +13,8 @@ import (
 )
 
 // 仕様 (FEATURE_SPEC §6.2 / ARCHITECTURE): production/staging では IAP ヘッダ必須。
-// ヘッダ値は "<provider>:<email>" を許容し、email 部分を reviewer として context に注入する。
-// ヘッダ不在・email 空は 401。
-func TestAuthMiddleware_仕様_productionのIAP要求(t *testing.T) {
+// ヘッダ値の email 部分を reviewer として context に注入する。
+func TestAuthMiddleware_RequireIAPInProduction(t *testing.T) {
 	cases := []struct {
 		name         string
 		header       string
@@ -77,7 +76,7 @@ func TestAuthMiddleware_仕様_productionのIAP要求(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §6.2): local 環境ではヘッダ不要で固定 reviewer を注入する。
-func TestAuthMiddleware_仕様_localはヘッダ不要(t *testing.T) {
+func TestAuthMiddleware_LocalSkipsHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var seenReviewer string
 	r := gin.New()

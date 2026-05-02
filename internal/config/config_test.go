@@ -50,8 +50,8 @@ func validProdEnv() map[string]string {
 	return m
 }
 
-// 仕様 (CLAUDE.md): デフォルト値フォールバック禁止。必須変数欠落・未知値・同ポート等は即 fail する。
-func TestFromEnv_仕様_必須変数と値の妥当性(t *testing.T) {
+// 仕様 (CLAUDE.md): デフォルト値フォールバックなし。env の妥当性を即 fail する。
+func TestFromEnv_RequiredAndValidation(t *testing.T) {
 	cases := []struct {
 		name    string
 		base    func() map[string]string
@@ -241,7 +241,7 @@ func TestFromEnv_仕様_必須変数と値の妥当性(t *testing.T) {
 }
 
 // 仕様: 正常な env から生成された Config はすべてのフィールドが env の値を反映する。
-func TestFromEnv_仕様_Configが全envを反映(t *testing.T) {
+func TestFromEnv_ReflectsAllEnv(t *testing.T) {
 	m := validProdEnv()
 	m["INTERNAL_PORT"] = "12345"
 	m["ADMIN_PORT"] = "12346"
@@ -278,7 +278,6 @@ func applyEnv(t *testing.T, m map[string]string) {
 	}
 }
 
-// assertErrExpectation は wantErr bool を require.Error / require.NoError にテーブル的に分岐する。
 func assertErrExpectation(t *testing.T, err error, wantErr bool) {
 	t.Helper()
 	assert.Equal(t, wantErr, err != nil, "err expectation: wantErr=%v, got=%v", wantErr, err)

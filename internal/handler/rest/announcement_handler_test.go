@@ -28,8 +28,8 @@ func newAnnouncementEngine(h *rest.AnnouncementHandler) *gin.Engine {
 	return r
 }
 
-// 仕様 (API_REFERENCE): GET /internal/v1/announcements は lang 必須。欠落・対応外は 400。
-func TestAnnouncementList_仕様_langバリデーション(t *testing.T) {
+// 仕様 (API_REFERENCE): GET /internal/v1/announcements は lang 必須。
+func TestAnnouncementList_LangValidation(t *testing.T) {
 	cases := []struct {
 		name       string
 		query      string
@@ -76,8 +76,8 @@ func TestAnnouncementList_仕様_langバリデーション(t *testing.T) {
 	}
 }
 
-// 仕様: List レスポンスは {"announcements": [...]} 形式、0 件でも nil でなく空配列。
-func TestAnnouncementList_仕様_空配列レスポンス(t *testing.T) {
+// 仕様: List レスポンスは 0 件でも nil でなく空配列を返す。
+func TestAnnouncementList_EmptyArrayResponse(t *testing.T) {
 	repo := &port.MockAnnouncementRepo{
 		ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
 			return nil, nil
@@ -97,7 +97,7 @@ func TestAnnouncementList_仕様_空配列レスポンス(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §10 / API_REFERENCE): GetDetail のエラー分類を HTTP に変換する。
-func TestAnnouncementGetDetail_仕様_HTTPマッピング(t *testing.T) {
+func TestAnnouncementGetDetail(t *testing.T) {
 	dbErr := errors.New("db lost")
 
 	cases := []struct {

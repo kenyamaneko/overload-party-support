@@ -19,9 +19,9 @@ func newInquiryRepo(t *testing.T) *postgres.InquiryRepository {
 	return postgres.NewInquiryRepository(sharedPG.Pool)
 }
 
-// 仕様 (FEATURE_SPEC §7.1): Create は status = new で INSERT し、採番 ID を含む行を返す。
-// 採番は DB の IDENTITY に委譲しており、連続 INSERT で後続の方が大きい ID を得ることで単調増加を確認する。
-func TestInquiryCreate_仕様(t *testing.T) {
+// 仕様 (FEATURE_SPEC §7.1): Create は status = new で INSERT し、採番 ID 付きの行を返す。
+// 採番は DB の IDENTITY に委譲する (連続 INSERT で単調増加)。
+func TestInquiryCreate(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
@@ -37,12 +37,11 @@ func TestInquiryCreate_仕様(t *testing.T) {
 	inq2, err := repo.Create(ctx, "T2", "B2", "u2@e.com")
 	require.NoError(t, err)
 	require.NotNil(t, inq2)
-	assert.Greater(t, inq2.InquiryID, inq1.InquiryID, "後続 INSERT は先行よりも大きい ID を得る (単調増加)")
+	assert.Greater(t, inq2.InquiryID, inq1.InquiryID)
 }
 
-// 仕様 (FEATURE_SPEC §8.3): List は空集合を返す契約 (nil ではなく長さ 0 の slice)。
-// 空 DB / 指定 status に一致する行が無い / statuses=nil (呼び出し側が全件展開する契約) のいずれでも同じ。
-func TestInquiryList_仕様_空集合(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): nil ではなく長さ 0 の slice を返す契約 (呼び出し側が range できる)。
+func TestInquiryList_Empty(t *testing.T) {
 	cases := []struct {
 		name     string
 		seed     func(t *testing.T, repo *postgres.InquiryRepository, ctx context.Context)
@@ -85,22 +84,26 @@ func TestInquiryList_仕様_空集合(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.3): List は statuses で指定された status の行のみを返す (指定外は混入しない)。
-// 件数の一致ではなく「返却された各行の status が指定集合に含まれる」観点で確認する。
-func TestInquiryList_仕様_指定外statusは混入しない(t *testing.T) {
+func TestInquiryList_FilterByStatus(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
-	// seed: 3 status をそれぞれ 1 件 (status=new / in_progress / closed)
-	_, err := repo.Create(ctx, "n", "B", "n@e.com")
-	require.NoError(t, err)
-	inqP, err := repo.Create(ctx, "p", "B", "p@e.com")
-	require.NoError(t, err)
-	inqC, err := repo.Create(ctx, "c", "B", "c@e.com")
-	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inqP.InquiryID, domain.StatusInProgress)
-	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inqC.InquiryID, domain.StatusClosed)
-	require.NoError(t, err)
+	mustCreate := func(title, body, email string) *domain.Inquiry {
+		t.Helper()
+		inq, err := repo.Create(ctx, title, body, email)
+		require.NoError(t, err)
+		return inq
+	}
+	mustUpdateStatus := func(id int64, status string) {
+		t.Helper()
+		_, err := repo.UpdateStatus(ctx, id, status)
+		require.NoError(t, err)
+	}
+	mustCreate("n", "B", "n@e.com")
+	inqP := mustCreate("p", "B", "p@e.com")
+	inqC := mustCreate("c", "B", "c@e.com")
+	mustUpdateStatus(inqP.InquiryID, domain.StatusInProgress)
+	mustUpdateStatus(inqC.InquiryID, domain.StatusClosed)
 
 	requested := []string{domain.StatusInProgress, domain.StatusClosed}
 	items, err := repo.List(ctx, requested)
@@ -112,22 +115,26 @@ func TestInquiryList_仕様_指定外statusは混入しない(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.3): List は updated_at DESC 順で並べる。
-// 直近 UPDATE された順 (inq3 → inq2 → inq1) を slice 比較 1 発で検証する。
-func TestInquiryList_仕様_並び順(t *testing.T) {
+func TestInquiryList_Order(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
-	// seed: 受付順 inq1 → inq2 → inq3。その後 inq2 を in_progress、inq3 を closed に更新。
-	inq1, err := repo.Create(ctx, "first", "B", "u1@e.com")
-	require.NoError(t, err)
-	inq2, err := repo.Create(ctx, "second", "B", "u2@e.com")
-	require.NoError(t, err)
-	inq3, err := repo.Create(ctx, "third", "B", "u3@e.com")
-	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inq2.InquiryID, domain.StatusInProgress)
-	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inq3.InquiryID, domain.StatusClosed)
-	require.NoError(t, err)
+	mustCreate := func(title, body, email string) *domain.Inquiry {
+		t.Helper()
+		inq, err := repo.Create(ctx, title, body, email)
+		require.NoError(t, err)
+		return inq
+	}
+	mustUpdateStatus := func(id int64, status string) {
+		t.Helper()
+		_, err := repo.UpdateStatus(ctx, id, status)
+		require.NoError(t, err)
+	}
+	inq1 := mustCreate("first", "B", "u1@e.com")
+	inq2 := mustCreate("second", "B", "u2@e.com")
+	inq3 := mustCreate("third", "B", "u3@e.com")
+	mustUpdateStatus(inq2.InquiryID, domain.StatusInProgress)
+	mustUpdateStatus(inq3.InquiryID, domain.StatusClosed)
 
 	items, err := repo.List(ctx, domain.Statuses)
 	require.NoError(t, err)
@@ -141,7 +148,7 @@ func TestInquiryList_仕様_並び順(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.3): Get は既存 ID に対応する行を返す。
-func TestInquiryGet_仕様_既存ID(t *testing.T) {
+func TestInquiryGet_Existing(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
@@ -157,8 +164,8 @@ func TestInquiryGet_仕様_既存ID(t *testing.T) {
 	assert.Equal(t, domain.StatusNew, got.Status)
 }
 
-// 仕様 (FEATURE_SPEC §8.3): Get は未存在で port.ErrNotFound。
-func TestInquiryGet_仕様_未存在(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): 未存在 ID は port.ErrNotFound。
+func TestInquiryGet_NotFound(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
@@ -166,9 +173,9 @@ func TestInquiryGet_仕様_未存在(t *testing.T) {
 	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 
-// 仕様 (FEATURE_SPEC §8.1): status CHECK 制約の許容値 (new / in_progress / closed) はすべて DDL レベルで通過する。
-// API 側で new への遷移を拒否するかは service 層の責務であり、DDL としては許容する。
-func TestUpdateStatus_仕様_許容値はCHECKを通過(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.1): status CHECK 制約の許容値はすべて DDL レベルで通過する。
+// API 側で new への遷移を拒否するかは usecase 層の責務であり、DDL としては許容する。
+func TestUpdateStatus_Allowed(t *testing.T) {
 	cases := []struct {
 		name   string
 		status string
@@ -201,7 +208,7 @@ func TestUpdateStatus_仕様_許容値はCHECKを通過(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.1): 許容値外の status は DDL CHECK で拒否され、DB エラーが返る。
-func TestUpdateStatus_仕様_許容値外はDB拒否(t *testing.T) {
+func TestUpdateStatus_Rejected(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 	inq, err := repo.Create(ctx, "T", "B", "u@e.com")
@@ -211,8 +218,8 @@ func TestUpdateStatus_仕様_許容値外はDB拒否(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// 仕様 (FEATURE_SPEC §8.1): 未存在 ID への UpdateStatus は port.ErrNotFound を返す。
-func TestUpdateStatus_仕様_未存在IDはErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.1): 未存在 ID は port.ErrNotFound。
+func TestUpdateStatus_NotFound(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
@@ -220,8 +227,8 @@ func TestUpdateStatus_仕様_未存在IDはErrNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 
-// 仕様 (FEATURE_SPEC §8.2): UpdateNote は渡された note を行に反映する。値あり / nil (NULL に戻す) のどちらも対応。
-func TestUpdateNote_仕様_noteを反映(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.2): UpdateNote は渡された note を行に反映する。
+func TestUpdateNote_Applies(t *testing.T) {
 	noteValue := "調査中"
 	prevValue := "prev"
 
@@ -265,8 +272,8 @@ func TestUpdateNote_仕様_noteを反映(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.2): 未存在 ID への UpdateNote は port.ErrNotFound を返す。
-func TestUpdateNote_仕様_未存在IDはErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.2): 未存在 ID は port.ErrNotFound。
+func TestUpdateNote_NotFound(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 	note := "N"

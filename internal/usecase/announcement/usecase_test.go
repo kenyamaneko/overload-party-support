@@ -18,9 +18,8 @@ var fixedNow = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 
 func nowFixed() time.Time { return fixedNow }
 
-// 仕様 (FEATURE_SPEC §3.2 / §4): lang は必須・対応言語のみ許容・フォールバックなし。
-// lang が妥当なときのみ repo が呼ばれる (早期 fail)。
-func TestList_仕様_langバリデーション(t *testing.T) {
+// 仕様 (FEATURE_SPEC §3.2 / §4): lang はフォールバックせずエラー。妥当なときのみ repo が呼ばれる (早期 fail)。
+func TestList_LangValidation(t *testing.T) {
 	cases := []struct {
 		name          string
 		lang          string
@@ -78,7 +77,7 @@ func TestList_仕様_langバリデーション(t *testing.T) {
 }
 
 // 仕様: List は repo に lang と now を透過し、結果をそのまま返す。
-func TestList_仕様_repoへの透過とレスポンス透過(t *testing.T) {
+func TestList_PortPassthrough(t *testing.T) {
 	want := []domain.AnnouncementSummary{{AnnouncementID: 1, Type: domain.TypeInfo, Title: "T", PublishedAt: fixedNow}}
 	var gotLang string
 	var gotNow time.Time
@@ -98,9 +97,8 @@ func TestList_仕様_repoへの透過とレスポンス透過(t *testing.T) {
 }
 
 
-// 仕様 (FEATURE_SPEC §5): GetDetail は lang 必須。repo の ErrNotFound は service 層 ErrNotFound にマップする。
-// それ以外のエラーは透過する (握りつぶし禁止)。
-func TestGetDetail_仕様_langバリデーションとエラー透過(t *testing.T) {
+// 仕様 (FEATURE_SPEC §5): GetDetail は repo の ErrNotFound を usecase の ErrNotFound にマップ。それ以外は透過 (握りつぶし禁止)。
+func TestGetDetail(t *testing.T) {
 	dbErr := errors.New("db connection lost")
 
 	cases := []struct {
@@ -125,7 +123,7 @@ func TestGetDetail_仕様_langバリデーションとエラー透過(t *testing
 			wantCall: true,
 		},
 		{
-			name:     "repo の not found は service の ErrNotFound にマップ",
+			name:     "repo の not found は usecase の ErrNotFound にマップ",
 			lang:     domain.LangJa,
 			repoErr:  port.ErrNotFound,
 			wantErr:  announcement.ErrNotFound,

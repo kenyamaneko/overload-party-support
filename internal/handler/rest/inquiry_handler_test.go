@@ -30,8 +30,8 @@ func newInquiryEngine(h *rest.InquiryHandler) *gin.Engine {
 	return r
 }
 
-// 仕様 (FEATURE_SPEC §8.3): status クエリの許容値以外は 400。
-func TestInquiryList_仕様_statusバリデーション(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): status クエリは許容値のみ受け付ける。
+func TestInquiryList_StatusValidation(t *testing.T) {
 	cases := []struct {
 		name       string
 		query      string
@@ -79,8 +79,7 @@ func TestInquiryList_仕様_statusバリデーション(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.1 / API_REFERENCE): UpdateStatus は遷移表に従う。
-// - 未知値 → 400, 非存在 → 404, 逆遷移 → 409。
-func TestInquiryUpdateStatus_仕様_HTTPマッピング(t *testing.T) {
+func TestInquiryUpdateStatus(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
@@ -148,8 +147,8 @@ func TestInquiryUpdateStatus_仕様_HTTPマッピング(t *testing.T) {
 	}
 }
 
-// 仕様 (API_REFERENCE): GetDetail は非存在で 404、非数値 ID も 404、不正リクエストパスの扱いを HTTP に射影する。
-func TestInquiryGetDetail_仕様_HTTPマッピング(t *testing.T) {
+// 仕様 (API_REFERENCE): GetDetail はエラー種別を HTTP に射影する。
+func TestInquiryGetDetail(t *testing.T) {
 	cases := []struct {
 		name       string
 		id         string
@@ -198,8 +197,8 @@ func TestInquiryGetDetail_仕様_HTTPマッピング(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.3): List は updated_at DESC 順の結果を JSON 配列で返す。0 件でも nil でない。
-func TestInquiryList_仕様_空配列レスポンス(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): List レスポンスは 0 件でも nil でなく空配列を返す。
+func TestInquiryList_EmptyArrayResponse(t *testing.T) {
 	store := &port.MockInquiryStore{
 		ListFn: func(_ context.Context, _ []string) ([]domain.Inquiry, error) {
 			return nil, nil
@@ -218,8 +217,8 @@ func TestInquiryList_仕様_空配列レスポンス(t *testing.T) {
 	assert.Empty(t, resp.Inquiries)
 }
 
-// 仕様: UpdateNote は nil / 空文字でメモ削除扱い。JSON レスポンスに internal_note が正しく載る。
-func TestInquiryUpdateNote_仕様_レスポンス(t *testing.T) {
+// 仕様: UpdateNote のレスポンスは internal_note を含む。
+func TestInquiryUpdateNote(t *testing.T) {
 	note := "running"
 	store := &port.MockInquiryStore{
 		UpdateNoteFn: func(_ context.Context, _ int64, got *string) (*domain.Inquiry, error) {

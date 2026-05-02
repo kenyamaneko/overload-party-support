@@ -35,10 +35,9 @@ func jaTr(title, body string) []domain.TranslationInput {
 	return []domain.TranslationInput{{Lang: domain.LangJa, Title: title, Body: body}}
 }
 
-// 仕様 (FEATURE_SPEC §6.4): Create は本体 + 受け取った翻訳群を同一 tx で INSERT する。
-// repo はロジックを持たず、渡された翻訳をそのまま永続化する (0 件 / ja のみ / ja+en いずれも許容)。
-// ja 必須などの業務制約は service 層の責務であり、repo 層のテストでは扱わない。
-func TestCreate_仕様_本体と翻訳群を同時作成(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.4): Create は本体 + 翻訳群を同一 tx で INSERT する。repo はロジックを持たず素通す。
+// ja 必須などの業務制約は usecase 層の責務であり、repo 層のテストでは扱わない。
+func TestCreate(t *testing.T) {
 	past := fixedNow.Add(-time.Hour)
 
 	cases := []struct {
@@ -101,12 +100,8 @@ func TestCreate_仕様_本体と翻訳群を同時作成(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §4.1): ListPublished は以下すべてを満たす行のみを返す。
-//   - published_at IS NOT NULL
-//   - published_at <= now
-//   - expires_at IS NULL OR expires_at > now
-//   - 指定 lang の翻訳行が存在する
-func TestListPublished_仕様_公開対象のみ返す(t *testing.T) {
+// 仕様 (FEATURE_SPEC §4.1): ListPublished は公開条件を満たす行のみを返す。
+func TestListPublished_OnlyPublished(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -114,65 +109,73 @@ func TestListPublished_仕様_公開対象のみ返す(t *testing.T) {
 	future := fixedNow.Add(24 * time.Hour)
 	farPast := fixedNow.Add(-48 * time.Hour)
 
-	mustCreate := func(t *testing.T, p domain.CreateAnnouncementParams) int64 {
-		t.Helper()
-		id, err := repo.Create(ctx, p)
+	seeds := []struct {
+		name   string
+		params domain.CreateAnnouncementParams
+	}{
+		{
+			name: "published_at<=now ∧ expires_at IS NULL (ja+en) → ja/en どちらでも返る",
+			params: domain.CreateAnnouncementParams{
+				Type:        domain.TypeInfo,
+				PublishedAt: &past,
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "published_at<=now (ja+en)", Body: "B"},
+					{Lang: domain.LangEn, Title: "published_at<=now (ja+en) [en]", Body: "B-en"},
+				},
+			},
+		},
+		{
+			name: "published_at=NULL → 公開対象外",
+			params: domain.CreateAnnouncementParams{
+				Type:         domain.TypeInfo,
+				PublishedAt:  nil,
+				Translations: jaTr("published_at=NULL", "B"),
+			},
+		},
+		{
+			name: "published_at>now → 公開対象外 (未到達)",
+			params: domain.CreateAnnouncementParams{
+				Type:         domain.TypeInfo,
+				PublishedAt:  &future,
+				Translations: jaTr("published_at>now", "B"),
+			},
+		},
+		{
+			name: "expires_at<=now → 公開対象外",
+			params: domain.CreateAnnouncementParams{
+				Type:         domain.TypeEvent,
+				PublishedAt:  &farPast,
+				ExpiresAt:    &past,
+				Translations: jaTr("expires_at<=now", "B"),
+			},
+		},
+		{
+			name: "published_at<=now ∧ expires_at>now → 含まれる (WHERE の OR 右辺ブランチ)",
+			params: domain.CreateAnnouncementParams{
+				Type:         domain.TypeInfo,
+				PublishedAt:  &past,
+				ExpiresAt:    &future,
+				Translations: jaTr("expires_at>now", "B"),
+			},
+		},
+		{
+			name: "published_at<=now ∧ ja のみ → en 問い合わせでは返らない",
+			params: domain.CreateAnnouncementParams{
+				Type:         domain.TypeInfo,
+				PublishedAt:  &past,
+				Translations: jaTr("published_at<=now (ja only)", "B"),
+			},
+		},
+	}
+	for _, s := range seeds {
+		_, err := repo.Create(ctx, s.params)
 		require.NoError(t, err)
-		return id
 	}
 
-	// published_at <= now かつ expires_at IS NULL。ja + en 翻訳あり → ja / en どちらでも返る
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:        domain.TypeInfo,
-		PublishedAt: &past,
-		Translations: []domain.TranslationInput{
-			{Lang: domain.LangJa, Title: "published_at<=now (ja+en)", Body: "B"},
-			{Lang: domain.LangEn, Title: "published_at<=now (ja+en) [en]", Body: "B-en"},
-		},
-	})
-
-	// published_at IS NULL → 公開対象外
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:         domain.TypeInfo,
-		PublishedAt:  nil,
-		Translations: jaTr("published_at=NULL", "B"),
-	})
-
-	// published_at > now → 公開対象外 (未到達)
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:         domain.TypeInfo,
-		PublishedAt:  &future,
-		Translations: jaTr("published_at>now", "B"),
-	})
-
-	// expires_at <= now → 公開対象外
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:         domain.TypeEvent,
-		PublishedAt:  &farPast,
-		ExpiresAt:    &past,
-		Translations: jaTr("expires_at<=now", "B"),
-	})
-
-	// published_at <= now かつ expires_at > now (期限まだ先) → 含まれる
-	// WHERE 句の `(expires_at IS NULL OR expires_at > now)` の OR 右辺ブランチを覆うケース。
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:         domain.TypeInfo,
-		PublishedAt:  &past,
-		ExpiresAt:    &future,
-		Translations: jaTr("expires_at>now", "B"),
-	})
-
-	// published_at <= now だが翻訳は ja のみ → en 問い合わせでは返らない
-	mustCreate(t, domain.CreateAnnouncementParams{
-		Type:         domain.TypeInfo,
-		PublishedAt:  &past,
-		Translations: jaTr("published_at<=now (ja only)", "B"),
-	})
-
 	cases := []struct {
-		name         string
-		lang         string
-		wantTitles   []string
+		name       string
+		lang       string
+		wantTitles []string
 	}{
 		{
 			name: "ja: 公開条件を満たす 3 件 (ja+en 行 / ja only 行 / expires_at>now 行)",
@@ -206,9 +209,8 @@ func TestListPublished_仕様_公開対象のみ返す(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §4.1): 空 DB に対する ListPublished はエラーなく空 slice を返す。
-// nil ではなく長さ 0 の slice を返すこと (呼び出し側が range できる契約)。
-func TestListPublished_仕様_空DB(t *testing.T) {
+// 仕様 (FEATURE_SPEC §4.1): 空 DB でも nil ではなく長さ 0 の slice を返す (呼び出し側が range できる契約)。
+func TestListPublished_EmptyDB(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -217,8 +219,8 @@ func TestListPublished_仕様_空DB(t *testing.T) {
 	assert.Empty(t, items)
 }
 
-// 仕様 (FEATURE_SPEC §4.1): 並び順は published_at DESC, announcement_id DESC。
-func TestListPublished_仕様_並び順(t *testing.T) {
+// 仕様 (FEATURE_SPEC §4.1): published_at DESC, announcement_id DESC で並ぶ。
+func TestListPublished_Order(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -226,38 +228,27 @@ func TestListPublished_仕様_並び順(t *testing.T) {
 	t2 := fixedNow.Add(-2 * time.Hour)
 	t3 := fixedNow.Add(-1 * time.Hour)
 
-	// t1 で 2 件、t2 で 1 件、t3 で 1 件
-	id1a, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1a", "B")})
-	require.NoError(t, err)
-	id1b, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1b", "B")})
-	require.NoError(t, err)
-	id2, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t2, Translations: jaTr("2", "B")})
-	require.NoError(t, err)
-	id3, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t3, Translations: jaTr("3", "B")})
-	require.NoError(t, err)
+	mustCreate := func(p domain.CreateAnnouncementParams) int64 {
+		t.Helper()
+		id, err := repo.Create(ctx, p)
+		require.NoError(t, err)
+		return id
+	}
+	id1a := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1a", "B")})
+	id1b := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1b", "B")})
+	id2 := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t2, Translations: jaTr("2", "B")})
+	id3 := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t3, Translations: jaTr("3", "B")})
 
 	items, err := repo.ListPublished(ctx, domain.LangJa, fixedNow)
 	require.NoError(t, err)
 	require.Len(t, items, 4)
 
-	// t3 が先頭、その後 t2、最後に t1 の 2 件 (id 降順)
-	assert.Equal(t, id3, items[0].AnnouncementID)
-	assert.Equal(t, id2, items[1].AnnouncementID)
-	assert.Equal(t, id1b, items[2].AnnouncementID)
-	assert.Equal(t, id1a, items[3].AnnouncementID)
+	gotIDs := []int64{items[0].AnnouncementID, items[1].AnnouncementID, items[2].AnnouncementID, items[3].AnnouncementID}
+	assert.Equal(t, []int64{id3, id2, id1b, id1a}, gotIDs)
 }
 
-// 仕様 (FEATURE_SPEC §6.3): ListAll は state 絞り込みを排他的に反映する。
-//   - state == nil → 全件
-//   - state == Draft → published_at IS NULL の record だけ
-//   - state == Scheduled → published_at が未来の record だけ
-//   - state == Published → 公開時刻到達済みかつ未失効の record だけ
-//   - state == Expired → 公開時刻到達済みかつ失効済みの record だけ
-//
-// 各 record は service.DeriveState(record, now) と一意に対応する state にのみヒットすること
-// (相互排他)。特に「published_at IS NULL かつ expires_at <= now」の record は Draft 扱いであり、
-// Expired には含まれない (DeriveState の判定順序と整合する)。
-func TestListAll_仕様_state別の排他絞り込み(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.3): ListAll の state 絞り込み。
+func TestListAll(t *testing.T) {
 	draft := domain.StateDraft
 	scheduled := domain.StateScheduled
 	published := domain.StatePublished
@@ -270,22 +261,40 @@ func TestListAll_仕様_state別の排他絞り込み(t *testing.T) {
 	future := fixedNow.Add(time.Hour)
 	farPast := fixedNow.Add(-48 * time.Hour)
 
-	_, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("draft", "B")})
-	require.NoError(t, err)
-	_, err = repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("scheduled", "B")})
-	require.NoError(t, err)
-	_, err = repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("published", "B")})
-	require.NoError(t, err)
-	_, err = repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeEvent, PublishedAt: &farPast, ExpiresAt: &past, Translations: jaTr("expired", "B")})
-	require.NoError(t, err)
-	// PublishedAt IS NULL かつ ExpiresAt <= now の境界 record。Draft 扱い (Expired には含まれない) であることを確認するため。
-	_, err = repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, ExpiresAt: &past, Translations: jaTr("draft with past expires", "B")})
-	require.NoError(t, err)
+	seeds := []struct {
+		name   string
+		params domain.CreateAnnouncementParams
+	}{
+		{
+			name:   "PublishedAt=NULL → Draft",
+			params: domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("draft", "B")},
+		},
+		{
+			name:   "PublishedAt>now → Scheduled",
+			params: domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("scheduled", "B")},
+		},
+		{
+			name:   "PublishedAt<=now ∧ ExpiresAt=NULL → Published",
+			params: domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("published", "B")},
+		},
+		{
+			name:   "PublishedAt<=now ∧ ExpiresAt<=now → Expired",
+			params: domain.CreateAnnouncementParams{Type: domain.TypeEvent, PublishedAt: &farPast, ExpiresAt: &past, Translations: jaTr("expired", "B")},
+		},
+		{
+			name:   "PublishedAt=NULL ∧ ExpiresAt<=now → Draft 境界 (Expired にならない)",
+			params: domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, ExpiresAt: &past, Translations: jaTr("draft with past expires", "B")},
+		},
+	}
+	for _, s := range seeds {
+		_, err := repo.Create(ctx, s.params)
+		require.NoError(t, err)
+	}
 
 	cases := []struct {
-		name        string
-		state       *string
-		wantTitles  []string
+		name       string
+		state      *string
+		wantTitles []string
 	}{
 		{
 			name:       "nil は全件",
@@ -319,7 +328,6 @@ func TestListAll_仕様_state別の排他絞り込み(t *testing.T) {
 			items, err := repo.ListAll(ctx, tc.state, fixedNow)
 			require.NoError(t, err)
 
-			// seed は全 record を ja 翻訳 1 件で作っているため、Translations を flat に抽出するだけで ja タイトル集合になる。
 			titles := make([]string, 0, len(items))
 			for _, it := range items {
 				for _, tr := range it.Translations {
@@ -331,21 +339,23 @@ func TestListAll_仕様_state別の排他絞り込み(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §5): GetPublishedDetail は published_at の値 (過去 / NULL / 未来) に依存せず、
-// 翻訳行が存在する限り返す (公開期間外でもアクセス可)。
-func TestGetPublishedDetail_仕様_publishedAtに依存せず返す(t *testing.T) {
+// 仕様 (FEATURE_SPEC §5): GetPublishedDetail は published_at の値に依存せず翻訳行があれば返す (公開期間外でもアクセス可)。
+func TestGetPublishedDetail_RegardlessOfPublishedAt(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
 	past := fixedNow.Add(-time.Hour)
 	future := fixedNow.Add(time.Hour)
 
-	pastID, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("past", "B-past")})
-	require.NoError(t, err)
-	nullID, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("null", "B-null")})
-	require.NoError(t, err)
-	futureID, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("future", "B-future")})
-	require.NoError(t, err)
+	mustCreate := func(p domain.CreateAnnouncementParams) int64 {
+		t.Helper()
+		id, err := repo.Create(ctx, p)
+		require.NoError(t, err)
+		return id
+	}
+	pastID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("past", "B-past")})
+	nullID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("null", "B-null")})
+	futureID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("future", "B-future")})
 
 	cases := []struct {
 		name     string
@@ -379,10 +389,8 @@ func TestGetPublishedDetail_仕様_publishedAtに依存せず返す(t *testing.T
 	}
 }
 
-// 仕様 (FEATURE_SPEC §5): GetPublishedDetail は以下の場合に port.ErrNotFound を返し、detail は nil。
-//   - 指定 lang の翻訳行が存在しない
-//   - announcement_id の行自体が存在しない
-func TestGetPublishedDetail_仕様_ErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §5): GetPublishedDetail は対象が無いとき port.ErrNotFound、detail は nil。
+func TestGetPublishedDetail_NotFound(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -416,8 +424,8 @@ func TestGetPublishedDetail_仕様_ErrNotFound(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §6.4): Update は既存 ID の本体属性 (type / published_at) を更新する。
-func TestUpdate_仕様_本体属性を更新(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.4): Update は本体属性を更新する。
+func TestUpdate_UpdatesEntity(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 	newTime := fixedNow.Add(time.Hour)
@@ -437,8 +445,8 @@ func TestUpdate_仕様_本体属性を更新(t *testing.T) {
 	assert.True(t, newTime.Equal(*aw.Announcement.PublishedAt), "want=%v got=%v", newTime, *aw.Announcement.PublishedAt)
 }
 
-// 仕様 (FEATURE_SPEC §6.4): Update は未存在 ID に対して port.ErrNotFound を返す。
-func TestUpdate_仕様_未存在IDはErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.4): 未存在 ID は port.ErrNotFound。
+func TestUpdate_NotFound(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -446,9 +454,8 @@ func TestUpdate_仕様_未存在IDはErrNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 
-// 仕様 (FEATURE_SPEC §6.5): UpsertTranslation は対象 (announcement_id, lang) の 1 行のみを変更し、他 lang 行には一切触れない。
-// INSERT (新規 lang 追加) と UPDATE (既存 lang 差し替え) の双方で、既存他 lang 行が維持されることを確認する。
-func TestUpsertTranslation_仕様_他lang行に影響しない(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.5): UpsertTranslation は対象 (announcement_id, lang) の 1 行のみを変更し、他 lang 行には触れない。
+func TestUpsertTranslation_DoesNotAffectOtherLangs(t *testing.T) {
 	cases := []struct {
 		name            string
 		seed            []domain.TranslationInput
@@ -539,8 +546,8 @@ func TestUpsertTranslation_仕様_他lang行に影響しない(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §6.5): UpsertTranslation は親記事が存在しなければ port.ErrNotFound。
-func TestUpsertTranslation_仕様_親記事なしはErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.5): 親記事が無いときは port.ErrNotFound。
+func TestUpsertTranslation_NotFound(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -548,8 +555,8 @@ func TestUpsertTranslation_仕様_親記事なしはErrNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 
-// 仕様 (FEATURE_SPEC §6.4): Delete は翻訳を持つ既存記事を FK CASCADE で同時削除し、以後 Get で ErrNotFound になる。
-func TestDelete_仕様_既存IDはCASCADE削除され再取得できない(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.4): Delete は翻訳行も FK CASCADE で同時削除する。
+func TestDelete_Cascades(t *testing.T) {
 	repo := newAnnouncementRepo(t)
 	ctx := context.Background()
 
@@ -560,12 +567,11 @@ func TestDelete_仕様_既存IDはCASCADE削除され再取得できない(t *te
 	require.NoError(t, repo.Delete(ctx, id))
 
 	_, err = repo.GetWithTranslations(ctx, id)
-	assert.ErrorIs(t, err, port.ErrNotFound, "Delete 後に Get で取得できないこと")
+	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 
-// 仕様 (FEATURE_SPEC §6.4): Delete は削除対象行が存在しない場合 port.ErrNotFound を返す。
-// 未存在 ID も二度目の Delete も同じ振る舞い。
-func TestDelete_仕様_ErrNotFound(t *testing.T) {
+// 仕様 (FEATURE_SPEC §6.4): Delete は対象行が無いとき port.ErrNotFound。
+func TestDelete_NotFound(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(t *testing.T, repo *postgres.AnnouncementRepository, ctx context.Context) int64
