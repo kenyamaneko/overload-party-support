@@ -1,6 +1,4 @@
 // Package inquiry は問い合わせ受付・管理ユースケース層。
-// 受付: DB INSERT → Slack 通知 → SendGrid メール の fail-fast 逐次実行 (FEATURE_SPEC §7)。
-// 管理: ステータス遷移 / メモ更新 / 一覧 / 詳細 (FEATURE_SPEC §8)。
 package inquiry
 
 import (
@@ -27,7 +25,7 @@ type Usecase struct {
 	snippetLength int
 }
 
-// New は Usecase を構築する。snippetLength は Slack 通知本文抜粋の文字数 (config から注入)。
+// New は Usecase を構築する。snippetLength は Slack 通知本文抜粋の文字数。
 func New(store port.InquiryStore, slack port.SlackNotifier, email port.EmailSender, snippetLength int) *Usecase {
 	return &Usecase{
 		store:         store,
@@ -37,9 +35,7 @@ func New(store port.InquiryStore, slack port.SlackNotifier, email port.EmailSend
 	}
 }
 
-// Submit は問い合わせ受付のオーケストレーションを行う (FEATURE_SPEC §7.1)。
-// 順序: バリデーション → DB INSERT → Slack 通知 → SendGrid メール。
-// 各段階で fail-fast (ARCHITECTURE.md 副作用オーケストレーション)。
+// Submit は問い合わせ受付のオーケストレーションを行う。
 func (u *Usecase) Submit(ctx context.Context, title, body, replyEmail string) (int64, error) {
 	if err := validateSubmit(title, body, replyEmail); err != nil {
 		return 0, err
@@ -63,7 +59,7 @@ func (u *Usecase) Submit(ctx context.Context, title, body, replyEmail string) (i
 	return inq.InquiryID, nil
 }
 
-// List は status フィルタ付き一覧 (FEATURE_SPEC §8.3)。空 slice はフィルタなし (全件)。
+// List は status フィルタ付き一覧。空 slice はフィルタなし (全件)。
 func (u *Usecase) List(ctx context.Context, statuses []string) ([]domain.Inquiry, error) {
 	parsed, err := parseStatuses(statuses)
 	if err != nil {
@@ -88,8 +84,7 @@ func (u *Usecase) Get(ctx context.Context, inquiryID int64) (*domain.Inquiry, er
 	return inq, nil
 }
 
-// UpdateStatus はステータスを更新する (FEATURE_SPEC §8.3)。
-// `new` への遷移は常に拒否 (server 初期値のみ)。`closed` からの逆遷移も拒否。
+// UpdateStatus はステータスを更新する。
 func (u *Usecase) UpdateStatus(ctx context.Context, inquiryID int64, newStatus string) (*domain.Inquiry, error) {
 	target := newStatus
 	if !domain.IsSupportedStatus(newStatus) {
@@ -136,7 +131,7 @@ func (u *Usecase) UpdateNote(ctx context.Context, inquiryID int64, note *string)
 	return updated, nil
 }
 
-// validateSubmit は受付時のバリデーション (FEATURE_SPEC §7.1)。
+// validateSubmit は受付時のバリデーション。
 func validateSubmit(title, body, replyEmail string) error {
 	if title == "" || body == "" || replyEmail == "" {
 		return ErrInvalidInquiry
@@ -153,8 +148,7 @@ func validateSubmit(title, body, replyEmail string) error {
 	return nil
 }
 
-// isValidTransition は FEATURE_SPEC §8.1 のステータス遷移表を実装する。
-// closed は終端。`new` への遷移は常に不可 (UpdateStatus 側で先に弾く)。
+// isValidTransition はステータス遷移表を実装する。
 func isValidTransition(from, to string) bool {
 	switch from {
 	case domain.StatusNew:
@@ -169,7 +163,6 @@ func isValidTransition(from, to string) bool {
 }
 
 // parseStatuses は許容外の値が含まれればエラー。指定なし (空 slice / 空文字のみ) は全 Status 展開して返す。
-// 「全件 = 全 Status を渡す」を service 層で明示することで、repo に「空 = 全件」の暗黙ルールを持ち込まない。
 func parseStatuses(ss []string) ([]string, error) {
 	out := make([]string, 0, len(ss))
 	for _, s := range ss {
@@ -187,7 +180,7 @@ func parseStatuses(ss []string) ([]string, error) {
 	return out, nil
 }
 
-// snippet は文字列を rune 単位で先頭 n 文字に切り詰める。n 超過時は末尾に "…" を付けない (実装単純化)。
+// snippet は文字列を rune 単位で先頭 n 文字に切り詰める。
 func snippet(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {

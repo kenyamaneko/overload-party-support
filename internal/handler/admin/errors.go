@@ -26,7 +26,7 @@ func errorStatus(err error) int {
 	}
 }
 
-// respondError は管理 UI のエラーをテキストで返す。HTMX は 4xx/5xx で hx-swap を抑止する。
+// respondError は管理 UI のエラーをテキストで返す。
 func respondError(c *gin.Context, err error) {
 	c.String(errorStatus(err), "%s", err.Error())
 }

@@ -1,8 +1,4 @@
 // Package postgrestest は DB を用いるテスト全般のヘルパを提供する。
-//
-// postgres:16-alpine の Testcontainers を起動して実 PostgreSQL に対してテストを
-// 実行する。コンテナはパッケージ単位で 1 回だけ起動し (RunMain)、テスト関数間の
-// 状態リセットは Truncate で行う。
 package postgrestest
 
 import (
@@ -31,7 +27,6 @@ type Postgres struct {
 }
 
 // Start は postgres:16-alpine コンテナを起動し db/schema.sql を適用した接続プールを返す。
-// 終了時は Close を呼ぶ (RunMain が代行する)。
 func Start(ctx context.Context) (*Postgres, error) {
 	root, err := repoRoot()
 	if err != nil {

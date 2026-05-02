@@ -1,5 +1,4 @@
 // Command server は support サービスの実行バイナリ。
-// 3 ポート (内部 API :9009 / 管理 UI :9109 / 外部フォーム :9209) を同一プロセスで並行起動する (ARCHITECTURE.md)。
 package main
 
 import (
@@ -103,7 +102,7 @@ func run() error {
 	return runAll(ctx, internalSrv, adminSrv, externalSrv)
 }
 
-// pickSlackNotifier は ENV に応じて real / noop を選択する (ARCHITECTURE.md クライアント注入境界)。
+// pickSlackNotifier は ENV に応じて real / noop を選択する。
 func pickSlackNotifier(cfg *config.Config) port.SlackNotifier {
 	if cfg.Env == config.EnvLocal {
 		return slacknoop.New()
@@ -120,7 +119,6 @@ func pickEmailSender(cfg *config.Config) (port.EmailSender, error) {
 }
 
 // setupLogger は env に応じて slog のハンドラを設定する。
-// production / staging は Cloud Logging 互換の JSON、それ以外は開発者向けのテキスト。
 func setupLogger(env config.Env) error {
 	switch env {
 	case config.EnvProduction, config.EnvStaging:

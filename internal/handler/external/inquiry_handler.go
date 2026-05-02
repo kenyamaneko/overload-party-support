@@ -1,5 +1,4 @@
 // Package external は外部公開フォーム (:9209) の delivery 層。
-// 認証なし、CORS で Origin を制限して問い合わせ受付のみを行う (FEATURE_SPEC §7.5)。
 package external
 
 import (
@@ -23,7 +22,7 @@ func NewInquiryHandler(uc *inquiry.Usecase) *InquiryHandler {
 	return &InquiryHandler{uc: uc}
 }
 
-// Submit は `POST /api/v1/inquiries` を処理する (FEATURE_SPEC §7.1)。
+// Submit は `POST /api/v1/inquiries` を処理する。
 func (h *InquiryHandler) Submit(c *gin.Context) {
 	var req apisupport.SubmitInquiryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,7 +40,6 @@ func (h *InquiryHandler) Submit(c *gin.Context) {
 }
 
 // submitErrorStatus は Submit 特有のエラー分類。
-// バリデーション系は 400、副作用 (Slack / SendGrid / DB) 失敗はすべて 500。
 func submitErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, inquiry.ErrInvalidInquiry), errors.Is(err, inquiry.ErrInvalidEmail):

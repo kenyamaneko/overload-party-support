@@ -9,7 +9,6 @@ import (
 )
 
 // NewExternal は問い合わせフォーム (:9209) 向けの公開ルータを構築する。
-// CORS で指定 Origin のみ受け入れ、認証は掛けない (FEATURE_SPEC §7.5)。
 func NewExternal(allowedOrigins []string, inq *external.InquiryHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(requestLogger(), gin.Recovery())
@@ -25,7 +24,6 @@ func NewExternal(allowedOrigins []string, inq *external.InquiryHandler) *gin.Eng
 }
 
 // corsMiddleware は許可オリジンのみ Access-Control-Allow-Origin を返す。
-// プリフライト (OPTIONS) にも 204 で応答する。
 func corsMiddleware(allowed []string) gin.HandlerFunc {
 	allowedSet := make(map[string]struct{}, len(allowed))
 	for _, o := range allowed {

@@ -8,7 +8,6 @@ import (
 )
 
 // NewAdmin は管理 UI (:9109) のルータを構築する。
-// IAP middleware を全 /admin/* に適用し、ENV=local ではヘッダ不要でパススルーする。
 func NewAdmin(env config.Env, adminH *admin.Handler) *gin.Engine {
 	r := gin.New()
 	r.Use(requestLogger(), gin.Recovery())

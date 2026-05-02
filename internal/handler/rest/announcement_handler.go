@@ -22,7 +22,7 @@ func NewAnnouncementHandler(uc *announcement.Usecase) *AnnouncementHandler {
 	return &AnnouncementHandler{uc: uc}
 }
 
-// List は `GET /internal/v1/announcements?lang=<code>` を処理する (FEATURE_SPEC §4)。
+// List は `GET /internal/v1/announcements?lang=<code>` を処理する。
 func (h *AnnouncementHandler) List(c *gin.Context) {
 	lang := c.Query("lang")
 	items, err := h.uc.List(c.Request.Context(), lang)
@@ -34,7 +34,7 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, apisupport.AnnouncementListResponse{Announcements: toAnnouncementSummaryResponses(items)})
 }
 
-// GetDetail は `GET /internal/v1/announcements/:announcementId?lang=<code>` を処理する (FEATURE_SPEC §5)。
+// GetDetail は `GET /internal/v1/announcements/:announcementId?lang=<code>` を処理する。
 func (h *AnnouncementHandler) GetDetail(c *gin.Context) {
 	lang := c.Query("lang")
 
@@ -55,8 +55,7 @@ func (h *AnnouncementHandler) GetDetail(c *gin.Context) {
 }
 
 // toAnnouncementSummaryResponses は domain の AnnouncementSummary を REST wire の
-// apisupport.AnnouncementSummary へ詰め替える。delivery 層の境界変換。
-// nil / 空集合の場合は長さ 0 の slice を返す (JSON で `[]` を保証する契約)。
+// apisupport.AnnouncementSummary へ詰め替える。
 func toAnnouncementSummaryResponses(items []domain.AnnouncementSummary) []apisupport.AnnouncementSummary {
 	out := make([]apisupport.AnnouncementSummary, 0, len(items))
 	for _, it := range items {
@@ -71,7 +70,7 @@ func toAnnouncementSummaryResponses(items []domain.AnnouncementSummary) []apisup
 }
 
 // toAnnouncementDetailResponse は domain の AnnouncementDetail を REST wire の
-// apisupport.AnnouncementDetail へ詰め替える。delivery 層の境界変換。
+// apisupport.AnnouncementDetail へ詰め替える。
 func toAnnouncementDetailResponse(d *domain.AnnouncementDetail) apisupport.AnnouncementDetail {
 	return apisupport.AnnouncementDetail{
 		AnnouncementID: d.AnnouncementID,

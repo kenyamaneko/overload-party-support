@@ -1,5 +1,4 @@
 // Package admin は運用者向け管理 UI (HTMX + html/template) の delivery 層。
-// 認証は IAP に委譲し、support コード内では X-Goog-Authenticated-User-Email ヘッダだけを信頼する。
 package admin
 
 import (
@@ -19,11 +18,10 @@ const iapEmailHeader = "X-Goog-Authenticated-User-Email"
 // localReviewerFallback は ENV=local のときに reviewer として注入する固定値。
 const localReviewerFallback = "local-dev@example.com"
 
-// ErrMissingIAPHeader は IAP ヘッダが欠けているときに返す。handler は 401 にマップする。
+// ErrMissingIAPHeader は IAP ヘッダが欠けているときに返す。
 var ErrMissingIAPHeader = errors.New("missing IAP authenticated user header")
 
 // AuthMiddleware は IAP ヘッダの存在確認と reviewer の context 注入を行う gin middleware を返す。
-// ENV=local のときはヘッダ不要で localReviewerFallback を注入する。
 func AuthMiddleware(env config.Env) gin.HandlerFunc {
 	if env == config.EnvLocal {
 		return func(c *gin.Context) {

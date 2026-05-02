@@ -1,5 +1,4 @@
 // Package config は環境変数からサービス起動に必要な設定を読み込む。
-// デフォルト値へのフォールバックは行わず、必須変数が欠ければ即 fail する (CLAUDE.md 設計思想)。
 package config
 
 import (
@@ -9,7 +8,7 @@ import (
 	"strings"
 )
 
-// Env はサービスの動作環境を表す enum。IAP middleware のスキップ判定と外部アダプタの切替に使う。
+// Env はサービスの動作環境を表す enum。
 type Env string
 
 const (
@@ -18,36 +17,35 @@ const (
 	EnvProduction Env = "production"
 )
 
-// Config はサービス全体の起動時設定。読み取り後は immutable として扱う。
+// Config はサービス全体の起動時設定。
 type Config struct {
 	Env Env
 
-	// HTTP ポート。内部 API / 管理 UI / 外部フォームを別ポートに分離する (ARCHITECTURE.md)。
+	// HTTP ポート。
 	InternalPort int
 	AdminPort    int
 	ExternalPort int
 
-	// PostgreSQL 接続文字列 (pgx 形式)。support スキーマへの書き込み権限を持つユーザーで接続する。
+	// PostgreSQL 接続文字列 (pgx 形式)。
 	DatabaseConn string
 
-	// 外部フォーム用 CORS 許可オリジン (カンマ区切りを slice に展開)。
+	// 外部フォーム用 CORS 許可オリジン。
 	CORSAllowedOrigins []string
 
-	// Slack 通知用本文抜粋の文字数 (FEATURE_SPEC §9.1)。
+	// Slack 通知用本文抜粋の文字数。
 	InquiryBodySnippetLength int
 
-	// SendGrid 共通設定。テンプレートは support 内で組み立てるため ID は持たない (ARCHITECTURE.md)。
+	// SendGrid 共通設定。
 	SendGridFromAddress string
 	SendGridFromName    string
 
-	// Env != local 時のみ必須 (ENV=local は mock アダプタを使うため空で可)。
+	// Env != local 時のみ必須。
 	SlackBotToken  string
 	SlackChannelID string
 	SendGridAPIKey string
 }
 
-// FromEnv は process env から Config を構築する。
-// 必須変数が未設定の場合はエラーを返す (デフォルト埋めは行わない)。
+// FromEnv は process env から Config を構築する。必須変数が未設定の場合はエラー。
 func FromEnv() (*Config, error) {
 	env, err := parseEnv(os.Getenv("ENV"))
 	if err != nil {
@@ -148,7 +146,6 @@ func parseEnv(s string) (Env, error) {
 }
 
 // validatePortsDistinct は 3 ポートがすべて異なることを確認する。
-// 同一ポートで信頼境界を分ける前提が崩れるため。
 func validatePortsDistinct(internal, admin, external int) error {
 	if internal == admin || internal == external || admin == external {
 		return fmt.Errorf("INTERNAL_PORT / ADMIN_PORT / EXTERNAL_PORT must all differ (got %d / %d / %d)",

@@ -1,6 +1,6 @@
 package domain
 
-// Statuses は問い合わせステータスの許容値 SSoT (FEATURE_SPEC §8.1)。
+// Statuses は問い合わせステータスの許容値 SSoT。
 var Statuses = []string{StatusNew, StatusInProgress, StatusClosed}
 
 // IsSupportedStatus は status 文字列が許容値に含まれるか判定する。

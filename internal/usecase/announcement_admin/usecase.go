@@ -1,5 +1,4 @@
 // Package announcementadmin は管理 UI (:9109) のお知らせ CRUD ユースケース層。
-// バリデーションと port.AnnouncementAdmin への委譲を担う。
 package announcementadmin
 
 import (
@@ -27,8 +26,7 @@ func New(admin port.AnnouncementAdmin, now func() time.Time) *Usecase {
 	return &Usecase{admin: admin, now: now}
 }
 
-// List は管理 UI の一覧取得 (FEATURE_SPEC §6.1 / §6.3)。
-// filter が空文字 / "all" の場合は全件 (state == nil)。
+// List は管理 UI の一覧取得。filter が空文字 / "all" の場合は全件。
 func (u *Usecase) List(ctx context.Context, filter string) ([]domain.AnnouncementWithTranslations, error) {
 	state, err := parseStateFilter(filter)
 	if err != nil {
@@ -41,10 +39,9 @@ func (u *Usecase) List(ctx context.Context, filter string) ([]domain.Announcemen
 	return items, nil
 }
 
-// DeriveState は本体属性から state を導出する (FEATURE_SPEC §6.3)。
-// state 境界の SSoT。repo の ListAll が state ごとに用意する WHERE 述語と 1:1 で対応する。
-// 判定順序が排他性を担保している (PublishedAt IS NULL を最初に判定するため、
-// 例えば PublishedAt=NULL ∧ ExpiresAt<=now の record は Expired ではなく Draft になる)。
+// DeriveState は本体属性から state を導出する。
+// 判定順序が排他性を担保する (PublishedAt IS NULL を最初に判定するため、
+// PublishedAt=NULL ∧ ExpiresAt<=now の record は Expired ではなく Draft になる)。
 func DeriveState(a domain.Announcement, now time.Time) string {
 	if a.PublishedAt == nil {
 		return domain.StateDraft
@@ -70,8 +67,7 @@ func (u *Usecase) Get(ctx context.Context, announcementID int64) (*domain.Announ
 	return got, nil
 }
 
-// Create は新規作成 (FEATURE_SPEC §6.4)。本体 + 翻訳群を同一 tx で INSERT する責務は port 実装側。
-// service は入力バリデーション (ja 翻訳必須・各フィールド制約・lang 重複なし) のみ担う。
+// Create は新規作成。
 func (u *Usecase) Create(ctx context.Context, params domain.CreateAnnouncementParams) (int64, error) {
 	if !domain.IsSupportedType(params.Type) {
 		return 0, ErrInvalidType
@@ -101,7 +97,7 @@ func (u *Usecase) Create(ctx context.Context, params domain.CreateAnnouncementPa
 	return id, nil
 }
 
-// Update は本体属性を更新する (FEATURE_SPEC §6.4)。
+// Update は本体属性を更新する。
 func (u *Usecase) Update(ctx context.Context, announcementID int64, params domain.UpdateAnnouncementParams) error {
 	if !domain.IsSupportedType(params.Type) {
 		return ErrInvalidType
@@ -128,7 +124,7 @@ func (u *Usecase) Delete(ctx context.Context, announcementID int64) error {
 	return nil
 }
 
-// UpsertTranslation は翻訳を INSERT / UPDATE する (FEATURE_SPEC §6.5)。
+// UpsertTranslation は翻訳を INSERT / UPDATE する。
 func (u *Usecase) UpsertTranslation(ctx context.Context, announcementID int64, lang, title, body string) error {
 	if err := validateTranslationFields(lang, title, body); err != nil {
 		return err
@@ -166,7 +162,7 @@ func parseStateFilter(s string) (*string, error) {
 	}
 }
 
-// validateTranslationFields は翻訳 upsert / 新規作成時のフィールド制約 (§6.6)。
+// validateTranslationFields は翻訳 upsert / 新規作成時のフィールド制約。
 func validateTranslationFields(lang, title, body string) error {
 	if !domain.IsSupportedLang(lang) {
 		return ErrUnsupportedLang

@@ -1,7 +1,4 @@
 // Package sendgrid は port.EmailSender の実装を提供する。
-// prod/staging では SendGrid v3 API を叩く RealSender、local では MockSender を使う。
-// テンプレートは support バイナリ内の html/template で組み立て、SendGrid 管理画面には置かない
-// (ARCHITECTURE.md「Slack / SendGrid クライアントの注入境界」)。
 package sendgrid
 
 import (
@@ -21,7 +18,7 @@ var _ port.EmailSender = (*RealSender)(nil)
 
 const mailSendURL = "https://api.sendgrid.com/v3/mail/send"
 
-// receiptTemplate は受付確認メールの日本語固定テンプレート (FEATURE_SPEC §7.2)。
+// receiptTemplate は受付確認メールの日本語固定テンプレート。
 const receiptTemplate = `{{.ReplyEmail}} 様
 
 お問い合わせを受け付けました。担当者から改めてご連絡いたします。
@@ -70,8 +67,7 @@ func NewRealSender(apiKey, fromAddress, fromName string) (*RealSender, error) {
 	}, nil
 }
 
-// SendInquiryReceipt は受付確認メールを SendGrid 経由で送信する (FEATURE_SPEC §7.2)。
-// snippet は service 側で確定済みの本文抜粋。adapter は文字列をテンプレートに流すだけ。
+// SendInquiryReceipt は受付確認メールを SendGrid 経由で送信する。
 func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *domain.Inquiry, snippet string) error {
 	bodyText, err := s.renderBody(inq, snippet)
 	if err != nil {
@@ -135,7 +131,7 @@ func (s *RealSender) renderSubject(inq *domain.Inquiry) (string, error) {
 	return buf.String(), nil
 }
 
-// templateData はテンプレート評価用のビューモデル。snippet は service が確定済み。
+// templateData はテンプレート評価用のビューモデル。
 func templateData(inq *domain.Inquiry, snippet string) map[string]any {
 	return map[string]any{
 		"InquiryID":   inq.InquiryID,

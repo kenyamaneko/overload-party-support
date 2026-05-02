@@ -1,5 +1,4 @@
 // Package postgres は port で定義されたリポジトリインタフェースの PostgreSQL 実装を提供する。
-// pgxpool を共有し、pure data access 層として振る舞う (ビジネスロジックを持たない)。
 package postgres
 
 import (
@@ -31,8 +30,7 @@ func NewAnnouncementRepository(pool *pgxpool.Pool) *AnnouncementRepository {
 	return &AnnouncementRepository{pool: pool}
 }
 
-// Create は本体 + 翻訳群を同一 tx で INSERT し、採番された announcement_id を返す (FEATURE_SPEC §6.4)。
-// どの言語を含めるかは service が決定し、repo は受け取った翻訳をそのまま INSERT する。
+// Create は本体 + 翻訳群を同一 tx で INSERT し、採番された announcement_id を返す。
 func (r *AnnouncementRepository) Create(ctx context.Context, params domain.CreateAnnouncementParams) (int64, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -67,7 +65,6 @@ func (r *AnnouncementRepository) Create(ctx context.Context, params domain.Creat
 }
 
 // ListPublished は公開期間内かつ指定 lang の翻訳が存在するお知らせを published_at DESC 順で返す。
-// published_at IS NULL (下書き) / published_at > now (予約公開) / expires_at <= now (期限切れ) は除外する。
 func (r *AnnouncementRepository) ListPublished(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT a.announcement_id, a.type, t.title, a.published_at
@@ -100,8 +97,6 @@ func (r *AnnouncementRepository) ListPublished(ctx context.Context, lang string,
 }
 
 // ListAll は state 絞り込みを適用した一覧 + 全翻訳を返す。state == nil は全件。
-// 各 state の述語は service.DeriveState の判定式と 1:1 対応する (SSoT は service 層)。
-// 各 state は相互排他に設計されている (例: PublishedAt=NULL ∧ ExpiresAt<=now の record は Draft のみにヒットする)。
 func (r *AnnouncementRepository) ListAll(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error) {
 	var query string
 	var args []any
@@ -175,8 +170,8 @@ func (r *AnnouncementRepository) ListAll(ctx context.Context, state *string, now
 	return results, nil
 }
 
-// GetPublishedDetail は ID + lang で単一のお知らせ詳細を返す。
-// 公開期間外・下書きでも返す (FEATURE_SPEC §5.2)。翻訳が存在しなければ ErrNotFound。
+// GetPublishedDetail は ID + lang で単一のお知らせ詳細を返す (公開期間外・下書きでも返す)。
+// 翻訳が存在しなければ ErrNotFound。
 func (r *AnnouncementRepository) GetPublishedDetail(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT a.announcement_id, a.type, t.title, t.body, a.published_at
@@ -241,7 +236,7 @@ func (r *AnnouncementRepository) Update(ctx context.Context, announcementID int6
 	return nil
 }
 
-// UpsertTranslation は翻訳を INSERT / UPDATE する (FEATURE_SPEC §6.5)。
+// UpsertTranslation は翻訳を INSERT / UPDATE する。
 // 親記事が存在しない場合は FK 違反が先に出るため、事前に存在確認してから実行する。
 func (r *AnnouncementRepository) UpsertTranslation(ctx context.Context, announcementID int64, lang, title, body string) error {
 	if err := r.announcementExists(ctx, announcementID); err != nil {

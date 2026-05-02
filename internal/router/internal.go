@@ -1,5 +1,4 @@
 // Package router は HTTP ルータ構築を一箇所に集める。
-// 内部 REST (:9009) / 管理 UI (:9109) / 外部フォーム (:9209) は信頼境界が異なるため別ルータとして分離する (ARCHITECTURE.md)。
 package router
 
 import (
@@ -13,7 +12,6 @@ import (
 )
 
 // NewInternal は gateway / slack-commands 向け内部 REST API のルータを構築する。
-// 認証は呼び出し元 (gateway や slack-commands) で完了している前提で、support 側では追加認証を行わない。
 func NewInternal(ann *rest.AnnouncementHandler, inq *rest.InquiryHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(requestLogger(), gin.Recovery())

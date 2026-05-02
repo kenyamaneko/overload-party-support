@@ -1,5 +1,4 @@
 // Package slack は port.SlackNotifier の prod/staging 実装 (chat.postMessage API) を提供する。
-// local 用の no-op 実装は slacknoop パッケージに分離されている。
 package slack
 
 import (
@@ -25,7 +24,7 @@ type RealNotifier struct {
 	client    *http.Client
 }
 
-// NewRealNotifier は RealNotifier を構築する。token / channelID は空であってはならない (config で検証済み)。
+// NewRealNotifier は RealNotifier を構築する。
 func NewRealNotifier(botToken, channelID string) *RealNotifier {
 	return &RealNotifier{
 		botToken:  botToken,
@@ -34,9 +33,7 @@ func NewRealNotifier(botToken, channelID string) *RealNotifier {
 	}
 }
 
-// NotifyInquiryReceived は問い合わせ受付通知を運営チャンネルに投稿する (FEATURE_SPEC §9.1)。
-// Block Kit 構造と interactive button の action_id 命名は slack-commands 側の責務なので、
-// ここではプレーンな Block メッセージだけを送る (button は slack-commands で後付けされる想定)。
+// NotifyInquiryReceived は問い合わせ受付通知を運営チャンネルに投稿する。
 func (n *RealNotifier) NotifyInquiryReceived(ctx context.Context, inq *domain.Inquiry, snippet string) error {
 	body := map[string]any{
 		"channel": n.channelID,

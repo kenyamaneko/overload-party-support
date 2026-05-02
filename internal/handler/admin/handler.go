@@ -29,7 +29,7 @@ type Handler struct {
 	now func() time.Time
 }
 
-// NewHandler は Handler を生成する。テンプレート初期化を起動時に 1 回だけ行う。
+// NewHandler は Handler を生成する。
 func NewHandler(uc *announcementadmin.Usecase, now func() time.Time) (*Handler, error) {
 	tpl, err := parseTemplates()
 	if err != nil {
@@ -38,7 +38,7 @@ func NewHandler(uc *announcementadmin.Usecase, now func() time.Time) (*Handler, 
 	return &Handler{uc: uc, tpl: tpl, now: now}, nil
 }
 
-// List は `GET /admin/announcements` を処理する (FEATURE_SPEC §6.1)。
+// List は `GET /admin/announcements` を処理する。
 func (h *Handler) List(c *gin.Context) {
 	filter := c.Query("status")
 	items, err := h.uc.List(c.Request.Context(), filter)
@@ -72,7 +72,7 @@ func (h *Handler) NewForm(c *gin.Context) {
 	renderPage(c, h.tpl.new, data)
 }
 
-// Create は `POST /admin/announcements` を処理する (FEATURE_SPEC §6.4)。
+// Create は `POST /admin/announcements` を処理する。
 func (h *Handler) Create(c *gin.Context) {
 	publishedAt, err := parseDatetimeLocal(c.PostForm("published_at"))
 	if err != nil {

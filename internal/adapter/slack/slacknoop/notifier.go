@@ -1,6 +1,4 @@
 // Package slacknoop は local 環境用の no-op SlackNotifier を提供する。
-// 外部送信は行わず slog にログするだけで、prod 用の chat.postMessage 実装 (adapter/slack)
-// と同居させないことで「production binary に偽実装が混入する」レイヤ違反を避ける。
 package slacknoop
 
 import (

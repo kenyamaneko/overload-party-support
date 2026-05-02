@@ -24,7 +24,7 @@ func NewInquiryRepository(pool *pgxpool.Pool) *InquiryRepository {
 	return &InquiryRepository{pool: pool}
 }
 
-// Create は問い合わせを status = new で INSERT する (FEATURE_SPEC §7.1)。
+// Create は問い合わせを status = new で INSERT する。
 func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
 	row := r.pool.QueryRow(ctx,
 		`INSERT INTO support.inquiries (title, body, reply_email, status)
@@ -35,8 +35,7 @@ func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail 
 	return scanInquiry(row)
 }
 
-// List は指定 statuses に一致する問い合わせを updated_at DESC 順で返す (FEATURE_SPEC §8.3)。
-// 「全件」の表現は呼び出し側が domain.Statuses を丸ごと渡して行う (repo は分岐を持たない)。
+// List は指定 statuses に一致する問い合わせを updated_at DESC 順で返す。
 func (r *InquiryRepository) List(ctx context.Context, statuses []string) ([]domain.Inquiry, error) {
 	stStr := make([]string, len(statuses))
 	for i, s := range statuses {

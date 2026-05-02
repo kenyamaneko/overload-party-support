@@ -20,7 +20,7 @@ type templates struct {
 	row  *template.Template // partials/row 単体 (削除後の行消去などに使う)
 }
 
-// parseTemplates は embed.FS からテンプレート集合を組み立てる。起動時に 1 回だけ呼ぶ。
+// parseTemplates は embed.FS からテンプレート集合を組み立てる。
 func parseTemplates() (*templates, error) {
 	base := template.New("").Funcs(templateFuncMap())
 

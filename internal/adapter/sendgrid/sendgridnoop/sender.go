@@ -1,6 +1,4 @@
 // Package sendgridnoop は local 環境用の no-op EmailSender を提供する。
-// 外部送信は行わず slog にログするだけで、prod 用の SendGrid 実装 (adapter/sendgrid)
-// と同居させないことで「production binary に偽実装が混入する」レイヤ違反を避ける。
 package sendgridnoop
 
 import (

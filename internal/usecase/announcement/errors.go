@@ -2,7 +2,7 @@ package announcement
 
 import "errors"
 
-// ErrLangRequired は lang クエリパラメータが未指定の場合に返す (FEATURE_SPEC §3.2)。
+// ErrLangRequired は lang クエリパラメータが未指定の場合に返す。
 var ErrLangRequired = errors.New("announcement: lang is required")
 
 // ErrUnsupportedLang は対応外の lang が指定された場合に返す。

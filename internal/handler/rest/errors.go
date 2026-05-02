@@ -1,5 +1,4 @@
 // Package rest は内部 REST API (:9009) の delivery 層。
-// gateway / slack-commands からの REST 呼び出しを受け、service 層に委譲する。
 package rest
 
 import (
@@ -11,7 +10,6 @@ import (
 )
 
 // errorStatus は service 層のエラーを HTTP ステータスコードに変換する。
-// service 層は HTTP を知らず、変換は handler 層の責務 (FEATURE_SPEC §10)。
 func errorStatus(err error) int {
 	switch {
 	case errors.Is(err, announcement.ErrNotFound),

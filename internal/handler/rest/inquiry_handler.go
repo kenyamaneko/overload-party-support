@@ -23,7 +23,7 @@ func NewInquiryHandler(uc *inquiry.Usecase) *InquiryHandler {
 	return &InquiryHandler{uc: uc}
 }
 
-// List は `GET /internal/v1/inquiries?status=new,in_progress` を処理する (FEATURE_SPEC §8.3)。
+// List は `GET /internal/v1/inquiries?status=new,in_progress` を処理する。
 func (h *InquiryHandler) List(c *gin.Context) {
 	statusRaw := c.Query("status")
 	var statuses []string
@@ -122,7 +122,6 @@ func toDetail(inq *domain.Inquiry) apisupport.InquiryDetail {
 }
 
 // toInquirySummaryResponses は domain.Inquiry の slice を InquirySummary 群へ詰め替える。
-// nil / 空集合の場合は長さ 0 の slice を返す (JSON で `[]` を保証する契約)。
 func toInquirySummaryResponses(items []domain.Inquiry) []apisupport.InquirySummary {
 	out := make([]apisupport.InquirySummary, 0, len(items))
 	for _, inq := range items {
