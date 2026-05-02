@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // 仕様 (FEATURE_SPEC §7.1): Submit は必須・長さ・email 形式をバリデートし、失敗時は repo/slack/email を呼ばない。
@@ -96,19 +96,19 @@ func TestSubmit_仕様_入力バリデーション(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var createCalled, slackCalled, emailCalled bool
 			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*apisupport.Inquiry, error) {
+				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
 					createCalled = true
-					return newInquiry(1, apisupport.StatusNew), nil
+					return newInquiry(1, domain.StatusNew), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *apisupport.Inquiry, _ string) error {
+				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
 					slackCalled = true
 					return nil
 				},
 			}
 			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *apisupport.Inquiry) error {
+				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
 					emailCalled = true
 					return nil
 				},
@@ -179,22 +179,22 @@ func TestSubmit_仕様_副作用はfailfast(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var createCalled, slackCalled, emailCalled bool
 			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*apisupport.Inquiry, error) {
+				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
 					createCalled = true
 					if tc.createErr != nil {
 						return nil, tc.createErr
 					}
-					return newInquiry(1, apisupport.StatusNew), nil
+					return newInquiry(1, domain.StatusNew), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *apisupport.Inquiry, _ string) error {
+				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
 					slackCalled = true
 					return tc.slackErr
 				},
 			}
 			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *apisupport.Inquiry) error {
+				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
 					emailCalled = true
 					return tc.sendErr
 				},
@@ -249,20 +249,20 @@ func TestSubmit_仕様_snippetは指定文字数(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var gotSnippet string
 			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, body string, _ string) (*apisupport.Inquiry, error) {
-					inq := newInquiry(1, apisupport.StatusNew)
+				CreateFn: func(_ context.Context, _ string, body string, _ string) (*domain.Inquiry, error) {
+					inq := newInquiry(1, domain.StatusNew)
 					inq.Body = body
 					return inq, nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *apisupport.Inquiry, snippet string) error {
+				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, snippet string) error {
 					gotSnippet = snippet
 					return nil
 				},
 			}
 			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *apisupport.Inquiry) error { return nil },
+				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
 			}
 
 			_, err := inquiry.New(store, slack, email, tc.snippetLen).Submit(context.Background(), "T", tc.body, "u@e.com")
@@ -281,64 +281,64 @@ func TestSubmit_仕様_snippetは指定文字数(t *testing.T) {
 func TestUpdateStatus_仕様_遷移表(t *testing.T) {
 	cases := []struct {
 		name      string
-		current   apisupport.Status
-		target    apisupport.Status
+		current   string
+		target    string
 		wantErr   error
 		wantWrite bool
 	}{
 		{
 			name:      "new → in_progress",
-			current:   apisupport.StatusNew,
-			target:    apisupport.StatusInProgress,
+			current:   domain.StatusNew,
+			target:    domain.StatusInProgress,
 			wantErr:   nil,
 			wantWrite: true,
 		},
 		{
 			name:      "new → closed",
-			current:   apisupport.StatusNew,
-			target:    apisupport.StatusClosed,
+			current:   domain.StatusNew,
+			target:    domain.StatusClosed,
 			wantErr:   nil,
 			wantWrite: true,
 		},
 		{
 			name:      "in_progress → closed",
-			current:   apisupport.StatusInProgress,
-			target:    apisupport.StatusClosed,
+			current:   domain.StatusInProgress,
+			target:    domain.StatusClosed,
 			wantErr:   nil,
 			wantWrite: true,
 		},
 		{
 			name:      "new → new 不可",
-			current:   apisupport.StatusNew,
-			target:    apisupport.StatusNew,
+			current:   domain.StatusNew,
+			target:    domain.StatusNew,
 			wantErr:   inquiry.ErrInvalidStatusTransition,
 			wantWrite: false,
 		},
 		{
 			name:      "in_progress → new 不可",
-			current:   apisupport.StatusInProgress,
-			target:    apisupport.StatusNew,
+			current:   domain.StatusInProgress,
+			target:    domain.StatusNew,
 			wantErr:   inquiry.ErrInvalidStatusTransition,
 			wantWrite: false,
 		},
 		{
 			name:      "closed → in_progress 不可",
-			current:   apisupport.StatusClosed,
-			target:    apisupport.StatusInProgress,
+			current:   domain.StatusClosed,
+			target:    domain.StatusInProgress,
 			wantErr:   inquiry.ErrInvalidStatusTransition,
 			wantWrite: false,
 		},
 		{
 			name:      "closed → closed 不可",
-			current:   apisupport.StatusClosed,
-			target:    apisupport.StatusClosed,
+			current:   domain.StatusClosed,
+			target:    domain.StatusClosed,
 			wantErr:   inquiry.ErrInvalidStatusTransition,
 			wantWrite: false,
 		},
 		{
 			name:      "closed → new 不可",
-			current:   apisupport.StatusClosed,
-			target:    apisupport.StatusNew,
+			current:   domain.StatusClosed,
+			target:    domain.StatusNew,
 			wantErr:   inquiry.ErrInvalidStatusTransition,
 			wantWrite: false,
 		},
@@ -349,10 +349,10 @@ func TestUpdateStatus_仕様_遷移表(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var wrote bool
 			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
+				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
 					return newInquiry(1, tc.current), nil
 				},
-				UpdateStatusFn: func(_ context.Context, _ int64, _ apisupport.Status) (*apisupport.Inquiry, error) {
+				UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
 					wrote = true
 					return newInquiry(1, tc.target), nil
 				},
@@ -393,14 +393,14 @@ func TestUpdateStatus_仕様_エラーマッピング(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
+				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
 					if tc.getErr != nil {
 						return nil, tc.getErr
 					}
-					return newInquiry(1, apisupport.StatusNew), nil
+					return newInquiry(1, domain.StatusNew), nil
 				},
-				UpdateStatusFn: func(_ context.Context, _ int64, _ apisupport.Status) (*apisupport.Inquiry, error) {
-					return newInquiry(1, apisupport.StatusInProgress), nil
+				UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
+					return newInquiry(1, domain.StatusInProgress), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{}
@@ -445,9 +445,9 @@ func TestUpdateNote_仕様_空文字は削除扱い(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var gotNote *string
 			store := &port.MockInquiryStore{
-				UpdateNoteFn: func(_ context.Context, _ int64, note *string) (*apisupport.Inquiry, error) {
+				UpdateNoteFn: func(_ context.Context, _ int64, note *string) (*domain.Inquiry, error) {
 					gotNote = note
-					return newInquiry(1, apisupport.StatusNew), nil
+					return newInquiry(1, domain.StatusNew), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{}
@@ -468,9 +468,9 @@ func TestUpdateNote_仕様_空文字は削除扱い(t *testing.T) {
 }
 
 // 仕様 (FEATURE_SPEC §8.3): List は status クエリをパースし、未知値を ErrInvalidStatusValue として早期 fail する。
-// 指定なし (nil / 空文字のみ) は apisupport.Statuses (全 Status) に展開して repo に渡す。
+// 指定なし (nil / 空文字のみ) は domain.Statuses (全 Status) に展開して repo に渡す。
 func TestList_仕様_statusパース(t *testing.T) {
-	allLen := len(apisupport.Statuses)
+	allLen := len(domain.Statuses)
 
 	cases := []struct {
 		name        string
@@ -527,9 +527,9 @@ func TestList_仕様_statusパース(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			var called bool
-			var gotStatuses []apisupport.Status
+			var gotStatuses []string
 			store := &port.MockInquiryStore{
-				ListFn: func(_ context.Context, s []apisupport.Status) ([]apisupport.Inquiry, error) {
+				ListFn: func(_ context.Context, s []string) ([]domain.Inquiry, error) {
 					called = true
 					gotStatuses = s
 					return nil, nil
@@ -574,11 +574,11 @@ func TestGet_仕様_NotFoundマップ(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
+				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
 					if tc.getErr != nil {
 						return nil, tc.getErr
 					}
-					return newInquiry(1, apisupport.StatusNew), nil
+					return newInquiry(1, domain.StatusNew), nil
 				},
 			}
 			_, err := inquiry.New(store, nil, nil, 200).Get(context.Background(), 1)
@@ -598,21 +598,21 @@ func TestGet_仕様_NotFoundマップ(t *testing.T) {
 func TestUpdateStatusNote_仕様_書き込み時のNotFound(t *testing.T) {
 	cases := []struct {
 		name        string
-		run         func(svc *inquiry.Service) error
+		run         func(uc *inquiry.Usecase) error
 		injectStore func() *port.MockInquiryStore
 	}{
 		{
 			name: "UpdateStatus: UpdateStatusFn が NotFound",
-			run: func(svc *inquiry.Service) error {
-				_, err := svc.UpdateStatus(context.Background(), 1, "in_progress")
+			run: func(uc *inquiry.Usecase) error {
+				_, err := uc.UpdateStatus(context.Background(), 1, "in_progress")
 				return err
 			},
 			injectStore: func() *port.MockInquiryStore {
 				return &port.MockInquiryStore{
-					GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
-						return newInquiry(1, apisupport.StatusNew), nil
+					GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
+						return newInquiry(1, domain.StatusNew), nil
 					},
-					UpdateStatusFn: func(_ context.Context, _ int64, _ apisupport.Status) (*apisupport.Inquiry, error) {
+					UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
 						return nil, port.ErrNotFound
 					},
 				}
@@ -620,13 +620,13 @@ func TestUpdateStatusNote_仕様_書き込み時のNotFound(t *testing.T) {
 		},
 		{
 			name: "UpdateNote: UpdateNoteFn が NotFound",
-			run: func(svc *inquiry.Service) error {
-				_, err := svc.UpdateNote(context.Background(), 1, nil)
+			run: func(uc *inquiry.Usecase) error {
+				_, err := uc.UpdateNote(context.Background(), 1, nil)
 				return err
 			},
 			injectStore: func() *port.MockInquiryStore {
 				return &port.MockInquiryStore{
-					UpdateNoteFn: func(_ context.Context, _ int64, _ *string) (*apisupport.Inquiry, error) {
+					UpdateNoteFn: func(_ context.Context, _ int64, _ *string) (*domain.Inquiry, error) {
 						return nil, port.ErrNotFound
 					},
 				}
@@ -638,8 +638,8 @@ func TestUpdateStatusNote_仕様_書き込み時のNotFound(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := tc.injectStore()
-			svc := inquiry.New(store, nil, nil, 200)
-			err := tc.run(svc)
+			uc := inquiry.New(store, nil, nil, 200)
+			err := tc.run(uc)
 			assert.ErrorIs(t, err, inquiry.ErrNotFound)
 		})
 	}
@@ -653,9 +653,9 @@ func errMessage(e error) string {
 	return e.Error()
 }
 
-func newInquiry(id int64, status apisupport.Status) *apisupport.Inquiry {
+func newInquiry(id int64, status string) *domain.Inquiry {
 	now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
-	return &apisupport.Inquiry{
+	return &domain.Inquiry{
 		InquiryID:  id,
 		Title:      "T",
 		Body:       "B",

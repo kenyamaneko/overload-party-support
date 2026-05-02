@@ -325,7 +325,7 @@ slack-commands の slash command（例 `/op-support list`）から `GET /interna
 
 ## 10. エラーセマンティクス
 
-service 層は HTTP ステータスを知らない。エラーはセンチネルとして返し、handler が `errors.Is` ベースの分類関数で transport 層のステータスに変換する（shop の `internal/service/errors.go` と同じ方針）。
+usecase 層は HTTP ステータスを知らない。エラーはセンチネルとして返し、handler が `errors.Is` ベースの分類関数で transport 層のステータスに変換する（shop の `internal/usecase/<feature>/errors.go` と同じ方針）。
 
 ### 10.1 分類
 

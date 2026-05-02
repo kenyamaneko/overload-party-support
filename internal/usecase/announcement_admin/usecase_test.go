@@ -11,67 +11,72 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/service/announcement_admin"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/usecase/announcement_admin"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 var fixedNow = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 
 func nowFixed() time.Time { return fixedNow }
 
-// 仕様 (FEATURE_SPEC §6.1 / §6.3): List は既知の status クエリ値を port.StatusFilter に変換して repo に渡す。
-// 空文字 / "all" は全件フィルタ、それ以外の既知値は対応する StatusFilter に対応する。
+// 仕様 (FEATURE_SPEC §6.1 / §6.3): List は既知の status クエリ値を *AnnouncementState に変換して repo に渡す。
+// 空文字 / "all" は nil (全件)、それ以外の既知値は対応する state を指す pointer に変換される。
 func TestList_仕様_フィルタパース(t *testing.T) {
+	draft := domain.StateDraft
+	scheduled := domain.StateScheduled
+	published := domain.StatePublished
+	expired := domain.StateExpired
+
 	cases := []struct {
-		name       string
-		filter     string
-		wantFilter port.StatusFilter
+		name      string
+		filter    string
+		wantState *string
 	}{
 		{
-			name:       "空文字は all",
-			filter:     "",
-			wantFilter: port.StatusFilterAll,
+			name:      "空文字は全件 (nil)",
+			filter:    "",
+			wantState: nil,
 		},
 		{
-			name:       "all",
-			filter:     "all",
-			wantFilter: port.StatusFilterAll,
+			name:      "all は全件 (nil)",
+			filter:    "all",
+			wantState: nil,
 		},
 		{
-			name:       "draft",
-			filter:     "draft",
-			wantFilter: port.StatusFilterDraft,
+			name:      "draft",
+			filter:    "draft",
+			wantState: &draft,
 		},
 		{
-			name:       "scheduled",
+			name:      "scheduled",
 			filter:     "scheduled",
-			wantFilter: port.StatusFilterScheduled,
+			wantState: &scheduled,
 		},
 		{
-			name:       "published",
-			filter:     "published",
-			wantFilter: port.StatusFilterPublished,
+			name:      "published",
+			filter:    "published",
+			wantState: &published,
 		},
 		{
-			name:       "expired",
-			filter:     "expired",
-			wantFilter: port.StatusFilterExpired,
+			name:      "expired",
+			filter:    "expired",
+			wantState: &expired,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var gotFilter port.StatusFilter
+			var gotState *string
 			repo := &port.MockAnnouncementRepo{
-				ListAllFn: func(_ context.Context, f port.StatusFilter, _ time.Time) ([]apisupport.AnnouncementWithTranslations, error) {
-					gotFilter = f
+				ListAllFn: func(_ context.Context, s *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					gotState = s
 					return nil, nil
 				},
 			}
 			_, err := announcementadmin.New(repo, nowFixed).List(context.Background(), tc.filter)
 
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantFilter, gotFilter)
+			assert.Equal(t, tc.wantState, gotState)
 		})
 	}
 }
@@ -85,6 +90,67 @@ func TestList_仕様_未知値はErrInvalidStatusFilter(t *testing.T) {
 	assert.ErrorIs(t, err, announcementadmin.ErrInvalidStatusFilter)
 }
 
+// 仕様 (FEATURE_SPEC §6.3): DeriveState は (PublishedAt, ExpiresAt) と now から state を一意に導出する。
+// 判定順序が排他性を担保している。特に PublishedAt IS NULL の record は ExpiresAt の値に依存せず Draft。
+func TestDeriveState_仕様_state導出(t *testing.T) {
+	past := fixedNow.Add(-time.Hour)
+	future := fixedNow.Add(time.Hour)
+
+	cases := []struct {
+		name      string
+		publishedAt *time.Time
+		expiresAt   *time.Time
+		want      string
+	}{
+		{
+			name:        "PublishedAt=NULL → Draft (ExpiresAt 未設定)",
+			publishedAt: nil,
+			expiresAt:   nil,
+			want:        domain.StateDraft,
+		},
+		{
+			name:        "PublishedAt=NULL → Draft (ExpiresAt 過去でも Expired にならない)",
+			publishedAt: nil,
+			expiresAt:   &past,
+			want:        domain.StateDraft,
+		},
+		{
+			name:        "PublishedAt>now → Scheduled",
+			publishedAt: &future,
+			expiresAt:   nil,
+			want:        domain.StateScheduled,
+		},
+		{
+			name:        "PublishedAt<=now ∧ ExpiresAt=NULL → Published",
+			publishedAt: &past,
+			expiresAt:   nil,
+			want:        domain.StatePublished,
+		},
+		{
+			name:        "PublishedAt<=now ∧ ExpiresAt>now → Published",
+			publishedAt: &past,
+			expiresAt:   &future,
+			want:        domain.StatePublished,
+		},
+		{
+			name:        "PublishedAt<=now ∧ ExpiresAt<=now → Expired",
+			publishedAt: &past,
+			expiresAt:   &past,
+			want:        domain.StateExpired,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := announcementadmin.DeriveState(domain.Announcement{
+				PublishedAt: tc.publishedAt,
+				ExpiresAt:   tc.expiresAt,
+			}, fixedNow)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // 仕様 (FEATURE_SPEC §6.4 / §6.6): Create は type と翻訳群をバリデートする。
 //   - ja 翻訳が少なくとも 1 件必須
 //   - 各翻訳は lang が対応言語 / title 非空 / title <= 200 / body 非空
@@ -92,16 +158,16 @@ func TestList_仕様_未知値はErrInvalidStatusFilter(t *testing.T) {
 func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 	cases := []struct {
 		name     string
-		params   announcementadmin.CreateParams
+		params   domain.CreateAnnouncementParams
 		wantErr  error
 		wantCall bool
 	}{
 		{
 			name: "ja のみ 正常",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
 				},
 			},
 			wantErr:  nil,
@@ -109,11 +175,11 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja + en 正常",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
-					{Lang: apisupport.LangEn, Title: "T-en", Body: "B-en"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
+					{Lang: domain.LangEn, Title: "T-en", Body: "B-en"},
 				},
 			},
 			wantErr:  nil,
@@ -121,10 +187,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "未知 type",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "nope",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidType,
@@ -132,10 +198,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja 翻訳なし",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangEn, Title: "T", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangEn, Title: "T", Body: "B"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -143,7 +209,7 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "翻訳空 (ja 必須違反)",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type:         "info",
 				Translations: nil,
 			},
@@ -152,10 +218,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja_title 空",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "", Body: "B"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -163,10 +229,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja_body 空",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: ""},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: ""},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -174,11 +240,11 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "en_title 空",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
-					{Lang: apisupport.LangEn, Title: "", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
+					{Lang: domain.LangEn, Title: "", Body: "B"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -186,10 +252,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "対応外 lang",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
 					{Lang: "fr", Title: "T", Body: "B"},
 				},
 			},
@@ -198,11 +264,11 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "lang 重複",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: "T", Body: "B"},
-					{Lang: apisupport.LangJa, Title: "T2", Body: "B2"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "T", Body: "B"},
+					{Lang: domain.LangJa, Title: "T2", Body: "B2"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -210,10 +276,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja_title 上限超過 (201 文字)",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: strings.Repeat("あ", 201), Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: strings.Repeat("あ", 201), Body: "B"},
 				},
 			},
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -221,10 +287,10 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		},
 		{
 			name: "ja_title 上限ちょうど (200 文字)",
-			params: announcementadmin.CreateParams{
+			params: domain.CreateAnnouncementParams{
 				Type: "info",
-				Translations: []announcementadmin.TranslationInput{
-					{Lang: apisupport.LangJa, Title: strings.Repeat("あ", 200), Body: "B"},
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: strings.Repeat("あ", 200), Body: "B"},
 				},
 			},
 			wantErr:  nil,
@@ -236,7 +302,7 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var called bool
 			repo := &port.MockAnnouncementRepo{
-				CreateFn: func(_ context.Context, _ port.CreateAnnouncementParams) (int64, error) {
+				CreateFn: func(_ context.Context, _ domain.CreateAnnouncementParams) (int64, error) {
 					called = true
 					return 42, nil
 				},
@@ -251,27 +317,27 @@ func TestCreate_仕様_typeと翻訳群のバリデーション(t *testing.T) {
 
 // 仕様 (FEATURE_SPEC §6.4): Create はバリデーション通過後、翻訳群をそのまま port に転送する。
 func TestCreate_仕様_翻訳群をportに転送(t *testing.T) {
-	var got port.CreateAnnouncementParams
+	var got domain.CreateAnnouncementParams
 	repo := &port.MockAnnouncementRepo{
-		CreateFn: func(_ context.Context, p port.CreateAnnouncementParams) (int64, error) {
+		CreateFn: func(_ context.Context, p domain.CreateAnnouncementParams) (int64, error) {
 			got = p
 			return 7, nil
 		},
 	}
-	id, err := announcementadmin.New(repo, nowFixed).Create(context.Background(), announcementadmin.CreateParams{
+	id, err := announcementadmin.New(repo, nowFixed).Create(context.Background(), domain.CreateAnnouncementParams{
 		Type: "info",
-		Translations: []announcementadmin.TranslationInput{
-			{Lang: apisupport.LangJa, Title: "T-ja", Body: "B-ja"},
-			{Lang: apisupport.LangEn, Title: "T-en", Body: "B-en"},
+		Translations: []domain.TranslationInput{
+			{Lang: domain.LangJa, Title: "T-ja", Body: "B-ja"},
+			{Lang: domain.LangEn, Title: "T-en", Body: "B-en"},
 		},
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(7), id)
-	assert.Equal(t, apisupport.TypeInfo, got.Type)
-	assert.Equal(t, []port.TranslationInput{
-		{Lang: apisupport.LangJa, Title: "T-ja", Body: "B-ja"},
-		{Lang: apisupport.LangEn, Title: "T-en", Body: "B-en"},
+	assert.Equal(t, domain.TypeInfo, got.Type)
+	assert.Equal(t, []domain.TranslationInput{
+		{Lang: domain.LangJa, Title: "T-ja", Body: "B-ja"},
+		{Lang: domain.LangEn, Title: "T-en", Body: "B-en"},
 	}, got.Translations)
 }
 
@@ -309,11 +375,11 @@ func TestUpdate_仕様_repoエラーマッピング(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
-				UpdateFn: func(_ context.Context, _ int64, _ port.UpdateAnnouncementParams) error {
+				UpdateFn: func(_ context.Context, _ int64, _ domain.UpdateAnnouncementParams) error {
 					return tc.repoErr
 				},
 			}
-			err := announcementadmin.New(repo, nowFixed).Update(context.Background(), 1, announcementadmin.UpdateParams{Type: "info"})
+			err := announcementadmin.New(repo, nowFixed).Update(context.Background(), 1, domain.UpdateAnnouncementParams{Type: "info"})
 			assert.ErrorIs(t, err, tc.wantErr)
 		})
 	}
@@ -370,7 +436,7 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 	}{
 		{
 			name:     "ja 正常",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			title:    "T",
 			body:     "B",
 			wantErr:  nil,
@@ -378,7 +444,7 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 		},
 		{
 			name:     "en 正常",
-			lang:     apisupport.LangEn,
+			lang:     domain.LangEn,
 			title:    "T",
 			body:     "B",
 			wantErr:  nil,
@@ -394,7 +460,7 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 		},
 		{
 			name:     "title 空",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			title:    "",
 			body:     "B",
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -402,7 +468,7 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 		},
 		{
 			name:     "body 空",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			title:    "T",
 			body:     "",
 			wantErr:  announcementadmin.ErrInvalidField,
@@ -431,13 +497,13 @@ func TestUpsertTranslation_仕様_バリデーション(t *testing.T) {
 // 成功ケースは repo が返した値をそのまま service が返す (mock は非 nil の結果を返す)。
 func TestGet_仕様_repoエラーマッピング(t *testing.T) {
 	dbErr := errors.New("db lost")
-	okResult := &apisupport.AnnouncementWithTranslations{
-		Announcement: apisupport.Announcement{AnnouncementID: 1, Type: apisupport.TypeInfo},
+	okResult := &domain.AnnouncementWithTranslations{
+		Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo},
 	}
 
 	cases := []struct {
 		name       string
-		repoResult *apisupport.AnnouncementWithTranslations
+		repoResult *domain.AnnouncementWithTranslations
 		repoErr    error
 		wantErr    error
 	}{
@@ -464,7 +530,7 @@ func TestGet_仕様_repoエラーマッピング(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.AnnouncementWithTranslations, error) {
+				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
 					return tc.repoResult, tc.repoErr
 				},
 			}
@@ -481,6 +547,6 @@ func TestUpsertTranslation_仕様_NotFoundマップ(t *testing.T) {
 			return port.ErrNotFound
 		},
 	}
-	err := announcementadmin.New(repo, nowFixed).UpsertTranslation(context.Background(), 999, apisupport.LangJa, "T", "B")
+	err := announcementadmin.New(repo, nowFixed).UpsertTranslation(context.Background(), 999, domain.LangJa, "T", "B")
 	assert.ErrorIs(t, err, announcementadmin.ErrNotFound)
 }

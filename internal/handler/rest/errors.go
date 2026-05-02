@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/kenyamaneko/overload-party-support/internal/service/announcement"
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 )
 
 // errorStatus は service 層のエラーを HTTP ステータスコードに変換する。

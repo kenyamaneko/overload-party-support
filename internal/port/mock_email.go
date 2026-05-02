@@ -3,19 +3,19 @@ package port
 import (
 	"context"
 
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // MockEmailSender は EmailSender のテスト用モック。
 type MockEmailSender struct {
-	SendInquiryReceiptFn func(ctx context.Context, inquiry *apisupport.Inquiry) error
+	SendInquiryReceiptFn func(ctx context.Context, inquiry *domain.Inquiry, snippet string) error
 }
 
 var _ EmailSender = (*MockEmailSender)(nil)
 
-func (m *MockEmailSender) SendInquiryReceipt(ctx context.Context, inquiry *apisupport.Inquiry) error {
+func (m *MockEmailSender) SendInquiryReceipt(ctx context.Context, inquiry *domain.Inquiry, snippet string) error {
 	if m.SendInquiryReceiptFn == nil {
 		panic("MockEmailSender.SendInquiryReceipt called without Fn")
 	}
-	return m.SendInquiryReceiptFn(ctx, inquiry)
+	return m.SendInquiryReceiptFn(ctx, inquiry, snippet)
 }

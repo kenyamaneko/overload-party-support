@@ -1,0 +1,217 @@
+# Support service model definitions (service-owned SSoT).
+#
+# scripts/generate_types.py reads this file and emits to multiple targets:
+#   - target: domain  -> internal/domain/        (package domain, internal logic types)
+#   - target: wire    -> packages/api-support/   (package apisupport, REST wire contract)
+#
+# 同じ JSON 形状を要求する型を両層に出力したい場合は targets: [domain, wire] で複数指定する。
+
+files:
+  # ─── Domain entities (internal logic types) ──────────────────────────
+  - name: announcement_entity
+    target: domain
+    types:
+      - name: Announcement
+        comment: |
+          Announcement はお知らせ本体の内部モデル (`support.announcements` 1 行)。
+          PublishedAt IS NULL = 下書き状態 (FEATURE_SPEC §4.2 / §6.3)。
+        fields:
+          - {name: AnnouncementID, type: int64}
+          - {name: Type, type: string}
+          - {name: PublishedAt, type: "*time.Time", comment: "NULL: 下書き"}
+          - {name: ExpiresAt, type: "*time.Time", comment: "NULL: 無期限"}
+          - {name: CreatedAt, type: time.Time}
+          - {name: UpdatedAt, type: time.Time}
+
+      - name: Translation
+        comment: "Translation はお知らせの言語別翻訳 (`support.announcement_translations` 1 行)。"
+        fields:
+          - {name: AnnouncementID, type: int64}
+          - {name: Lang, type: string}
+          - {name: Title, type: string}
+          - {name: Body, type: string}
+          - {name: UpdatedAt, type: time.Time}
+
+      - name: AnnouncementWithTranslations
+        comment: "AnnouncementWithTranslations は管理 UI が記事編集画面で扱う、本体 + 全言語翻訳のペア。"
+        fields:
+          - {name: Announcement, type: Announcement}
+          - {name: Translations, type: "[]Translation"}
+
+      - name: TranslationInput
+        comment: |
+          TranslationInput はお知らせ作成 / 翻訳 upsert の入力 1 件分。
+          値オブジェクトとして port (repo) と usecase で共通利用する。
+        fields:
+          - {name: Lang, type: string}
+          - {name: Title, type: string}
+          - {name: Body, type: string}
+
+      - name: CreateAnnouncementParams
+        comment: "CreateAnnouncementParams は新規作成に必要なフィールド集合。"
+        fields:
+          - {name: Type, type: string}
+          - {name: PublishedAt, type: "*time.Time", comment: "nil: 下書き"}
+          - {name: ExpiresAt, type: "*time.Time", comment: "nil: 無期限"}
+          - {name: Translations, type: "[]TranslationInput"}
+
+      - name: UpdateAnnouncementParams
+        comment: "UpdateAnnouncementParams は本体更新に必要なフィールド集合 (翻訳は UpsertTranslation 経由)。"
+        fields:
+          - {name: Type, type: string}
+          - {name: PublishedAt, type: "*time.Time"}
+          - {name: ExpiresAt, type: "*time.Time"}
+
+      - name: AnnouncementSummary
+        comment: |
+          AnnouncementSummary は ListPublished の戻り値要素 (本体 + lang 固有の title)。
+          wire の apisupport.AnnouncementSummary とは別型で、handler 層が詰め替える。
+        fields:
+          - {name: AnnouncementID, type: int64}
+          - {name: Type, type: string}
+          - {name: Title, type: string}
+          - {name: PublishedAt, type: time.Time}
+
+      - name: AnnouncementDetail
+        comment: |
+          AnnouncementDetail は GetPublishedDetail の戻り値 (本体 + lang 固有の title/body)。
+          wire の apisupport.AnnouncementDetail とは別型で、handler 層が詰め替える。
+        fields:
+          - {name: AnnouncementID, type: int64}
+          - {name: Type, type: string}
+          - {name: Title, type: string}
+          - {name: Body, type: string}
+          - {name: PublishedAt, type: "*time.Time"}
+
+  # ─── Domain enums (FEATURE_SPEC §2 / §3 / §6.3 / §8.1) ────────────────
+  # Type / Lang / AnnouncementState / Status の許容値を string const として束ねる。
+  # 許容値スライス (Types/SupportedLangs/Statuses) と IsSupportedX helper は
+  # generator の対象外なので internal/domain/helpers.go (手書き) で提供する。
+  - name: announcement_enum
+    target: domain
+    constants:
+      - type: string
+        values:
+          # Type (FEATURE_SPEC §2)
+          - {name: TypeInfo, value: "info"}
+          - {name: TypeMaintenance, value: "maintenance"}
+          - {name: TypeEvent, value: "event"}
+          - {name: TypeUpdate, value: "update"}
+          # Lang (FEATURE_SPEC §3)
+          - {name: LangJa, value: "ja"}
+          - {name: LangEn, value: "en"}
+          # AnnouncementState (FEATURE_SPEC §6.3) — published_at/expires_at から usecase が導出
+          - {name: StateDraft, value: "draft"}
+          - {name: StateScheduled, value: "scheduled"}
+          - {name: StatePublished, value: "published"}
+          - {name: StateExpired, value: "expired"}
+
+  # ─── Inquiry entity ──────────────────────────────────────────────────
+  - name: inquiry_entity
+    target: domain
+    types:
+      - name: Inquiry
+        comment: "Inquiry は問い合わせの内部モデル (`support.inquiries` 1 行)。"
+        fields:
+          - {name: InquiryID, type: int64}
+          - {name: Title, type: string}
+          - {name: Body, type: string}
+          - {name: ReplyEmail, type: string}
+          - {name: Status, type: string}
+          - {name: InternalNote, type: "*string", comment: "NULL: メモなし"}
+          - {name: CreatedAt, type: time.Time}
+          - {name: UpdatedAt, type: time.Time}
+
+  # ─── Inquiry enums (FEATURE_SPEC §8.1) ───────────────────────────────
+  - name: inquiry_enum
+    target: domain
+    constants:
+      - type: string
+        values:
+          - {name: StatusNew, value: "new"}
+          - {name: StatusInProgress, value: "in_progress"}
+          - {name: StatusClosed, value: "closed"}
+
+  # ─── Wire types (REST request/response, gateway-shared) ──────────────
+  - name: announcement_wire
+    target: wire
+    types:
+      - name: AnnouncementSummary
+        comment: |
+          AnnouncementSummary は `GET /internal/v1/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+          expires_at / body はクライアントに露出させない。
+        fields:
+          - {name: AnnouncementID, type: int64, json: "announcement_id"}
+          - {name: Type, type: string, json: "type"}
+          - {name: Title, type: string, json: "title"}
+          - {name: PublishedAt, type: time.Time, json: "published_at"}
+
+      - name: AnnouncementListResponse
+        comment: "AnnouncementListResponse は `GET /internal/v1/announcements` のトップレベル JSON。"
+        fields:
+          - {name: Announcements, type: "[]AnnouncementSummary", json: "announcements"}
+
+      - name: AnnouncementDetail
+        comment: |
+          AnnouncementDetail は `GET /internal/v1/announcements/:id` のレスポンス (FEATURE_SPEC §5)。
+          published_at は下書きの場合 null、expires_at はクライアントに露出させない。
+        fields:
+          - {name: AnnouncementID, type: int64, json: "announcement_id"}
+          - {name: Type, type: string, json: "type"}
+          - {name: Title, type: string, json: "title"}
+          - {name: Body, type: string, json: "body"}
+          - {name: PublishedAt, type: "*time.Time", json: "published_at"}
+
+  - name: inquiry_wire
+    target: wire
+    types:
+      - name: SubmitInquiryRequest
+        comment: "SubmitInquiryRequest は `POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。"
+        fields:
+          - {name: Title, type: string, json: "title"}
+          - {name: Body, type: string, json: "body"}
+          - {name: ReplyEmail, type: string, json: "reply_email"}
+
+      - name: SubmitInquiryResponse
+        comment: "SubmitInquiryResponse は `POST /api/v1/inquiries` の出力。"
+        fields:
+          - {name: InquiryID, type: int64, json: "inquiry_id"}
+
+      - name: InquirySummary
+        comment: "InquirySummary は `GET /internal/v1/inquiries` のレスポンス要素 (FEATURE_SPEC §8.3)。"
+        fields:
+          - {name: InquiryID, type: int64, json: "inquiry_id"}
+          - {name: Title, type: string, json: "title"}
+          - {name: ReplyEmail, type: string, json: "reply_email"}
+          - {name: Status, type: string, json: "status"}
+          - {name: CreatedAt, type: time.Time, json: "created_at"}
+          - {name: UpdatedAt, type: time.Time, json: "updated_at"}
+
+      - name: InquiryListResponse
+        comment: "InquiryListResponse は `GET /internal/v1/inquiries` のトップレベル JSON。"
+        fields:
+          - {name: Inquiries, type: "[]InquirySummary", json: "inquiries"}
+
+      - name: InquiryDetail
+        comment: "InquiryDetail は `GET /internal/v1/inquiries/:id` のレスポンス。internal_note を含む。"
+        fields:
+          - {name: InquiryID, type: int64, json: "inquiry_id"}
+          - {name: Title, type: string, json: "title"}
+          - {name: Body, type: string, json: "body"}
+          - {name: ReplyEmail, type: string, json: "reply_email"}
+          - {name: Status, type: string, json: "status"}
+          - {name: InternalNote, type: "*string", json: "internal_note"}
+          - {name: CreatedAt, type: time.Time, json: "created_at"}
+          - {name: UpdatedAt, type: time.Time, json: "updated_at"}
+
+      - name: UpdateInquiryStatusRequest
+        comment: "UpdateInquiryStatusRequest は `POST /internal/v1/inquiries/:id/status` の入力。"
+        fields:
+          - {name: Status, type: string, json: "status"}
+
+      - name: UpdateInquiryNoteRequest
+        comment: |
+          UpdateInquiryNoteRequest は `POST /internal/v1/inquiries/:id/note` の入力。
+          null / 空文字はメモ削除として扱う。
+        fields:
+          - {name: InternalNote, type: "*string", json: "internal_note"}

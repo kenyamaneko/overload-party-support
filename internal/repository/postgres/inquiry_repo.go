@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 var _ port.InquiryStore = (*InquiryRepository)(nil)
@@ -25,7 +25,7 @@ func NewInquiryRepository(pool *pgxpool.Pool) *InquiryRepository {
 }
 
 // Create は問い合わせを status = new で INSERT する (FEATURE_SPEC §7.1)。
-func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail string) (*apisupport.Inquiry, error) {
+func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
 	row := r.pool.QueryRow(ctx,
 		`INSERT INTO support.inquiries (title, body, reply_email, status)
 		 VALUES ($1, $2, $3, 'new')
@@ -36,8 +36,8 @@ func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail 
 }
 
 // List は指定 statuses に一致する問い合わせを updated_at DESC 順で返す (FEATURE_SPEC §8.3)。
-// 「全件」の表現は呼び出し側が apisupport.Statuses を丸ごと渡して行う (repo は分岐を持たない)。
-func (r *InquiryRepository) List(ctx context.Context, statuses []apisupport.Status) ([]apisupport.Inquiry, error) {
+// 「全件」の表現は呼び出し側が domain.Statuses を丸ごと渡して行う (repo は分岐を持たない)。
+func (r *InquiryRepository) List(ctx context.Context, statuses []string) ([]domain.Inquiry, error) {
 	stStr := make([]string, len(statuses))
 	for i, s := range statuses {
 		stStr[i] = string(s)
@@ -54,7 +54,7 @@ func (r *InquiryRepository) List(ctx context.Context, statuses []apisupport.Stat
 	}
 	defer rows.Close()
 
-	var items []apisupport.Inquiry
+	var items []domain.Inquiry
 	for rows.Next() {
 		inq, err := scanInquiry(rows)
 		if err != nil {
@@ -69,7 +69,7 @@ func (r *InquiryRepository) List(ctx context.Context, statuses []apisupport.Stat
 }
 
 // Get は ID で単一の問い合わせを返す。非存在なら ErrNotFound。
-func (r *InquiryRepository) Get(ctx context.Context, inquiryID int64) (*apisupport.Inquiry, error) {
+func (r *InquiryRepository) Get(ctx context.Context, inquiryID int64) (*domain.Inquiry, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT inquiry_id, title, body, reply_email, status, internal_note, created_at, updated_at
 		   FROM support.inquiries
@@ -87,7 +87,7 @@ func (r *InquiryRepository) Get(ctx context.Context, inquiryID int64) (*apisuppo
 }
 
 // UpdateStatus は status を更新し、更新後の行を返す。非存在なら ErrNotFound。
-func (r *InquiryRepository) UpdateStatus(ctx context.Context, inquiryID int64, newStatus apisupport.Status) (*apisupport.Inquiry, error) {
+func (r *InquiryRepository) UpdateStatus(ctx context.Context, inquiryID int64, newStatus string) (*domain.Inquiry, error) {
 	row := r.pool.QueryRow(ctx,
 		`UPDATE support.inquiries
 		    SET status = $2
@@ -106,7 +106,7 @@ func (r *InquiryRepository) UpdateStatus(ctx context.Context, inquiryID int64, n
 }
 
 // UpdateNote は internal_note を更新し、更新後の行を返す。非存在なら ErrNotFound。
-func (r *InquiryRepository) UpdateNote(ctx context.Context, inquiryID int64, note *string) (*apisupport.Inquiry, error) {
+func (r *InquiryRepository) UpdateNote(ctx context.Context, inquiryID int64, note *string) (*domain.Inquiry, error) {
 	row := r.pool.QueryRow(ctx,
 		`UPDATE support.inquiries
 		    SET internal_note = $2
@@ -125,8 +125,8 @@ func (r *InquiryRepository) UpdateNote(ctx context.Context, inquiryID int64, not
 }
 
 // scanInquiry は Inquiry 全カラム分の Scan を共通化する。
-func scanInquiry(row pgx.Row) (*apisupport.Inquiry, error) {
-	var inq apisupport.Inquiry
+func scanInquiry(row pgx.Row) (*domain.Inquiry, error) {
+	var inq domain.Inquiry
 	var statusStr string
 	if err := row.Scan(
 		&inq.InquiryID, &inq.Title, &inq.Body, &inq.ReplyEmail,
@@ -134,6 +134,6 @@ func scanInquiry(row pgx.Row) (*apisupport.Inquiry, error) {
 	); err != nil {
 		return nil, err
 	}
-	inq.Status = apisupport.Status(statusStr)
+	inq.Status = statusStr
 	return &inq, nil
 }

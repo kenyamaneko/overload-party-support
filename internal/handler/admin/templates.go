@@ -6,7 +6,7 @@ import (
 	"html/template"
 	"time"
 
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 //go:embed templates/*.html templates/partials/*.html
@@ -67,7 +67,7 @@ func parseTemplates() (*templates, error) {
 func templateFuncMap() template.FuncMap {
 	return template.FuncMap{
 		// findTranslation は指定 lang の翻訳を検索して返す。存在しなければ nil。
-		"findTranslation": func(translations []apisupport.Translation, lang string) *apisupport.Translation {
+		"findTranslation": func(translations []domain.Translation, lang string) *domain.Translation {
 			for i := range translations {
 				if translations[i].Lang == lang {
 					return &translations[i]

@@ -20,12 +20,12 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 <!-- BEGIN GENERATED: announcements -->
 | カラム名 | 型 | Nullable | 説明 |
 |---|---|---|---|
-| `announcement_id` | BIGINT (IDENTITY) | No | 自動採番 |
-| `type` | VARCHAR(20) | No | 種別 (info / maintenance / event / update) |
-| `published_at` | TIMESTAMPTZ | Yes | 公開開始日時。NULL は下書き状態、未来日時は予約公開 |
-| `expires_at` | TIMESTAMPTZ | Yes | 公開終了日時。NULL は無期限公開 |
+| `announcement_id` | BIGINT (IDENTITY) | No |  |
+| `type` | VARCHAR(20) | No | info / maintenance / event / update |
+| `published_at` | TIMESTAMPTZ | Yes | NULL: 下書き, 未来日時: 予約公開, <=now: 公開中 |
+| `expires_at` | TIMESTAMPTZ | Yes | NULL: 無期限公開 |
 | `created_at` | TIMESTAMPTZ | No | レコード作成日時 |
-| `updated_at` | TIMESTAMPTZ | No | 更新日時（trigger で自動更新） |
+| `updated_at` | TIMESTAMPTZ | No | 最終更新日時 (trigger で自動更新) |
 <!-- END GENERATED: announcements -->
 
 **設計判断:**
@@ -43,11 +43,11 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 <!-- BEGIN GENERATED: announcement_translations -->
 | カラム名 | 型 | Nullable | 説明 |
 |---|---|---|---|
-| `announcement_id` | BIGINT | No | 親お知らせ |
-| `lang` | VARCHAR(10) | No | 言語コード (`ja` / `en` 等。SSoT は support 内の定数) |
-| `title` | VARCHAR(200) | No | タイトル |
-| `body` | TEXT | No | 本文（長さ上限なし） |
-| `updated_at` | TIMESTAMPTZ | No | 更新日時 |
+| `announcement_id` | BIGINT | No |  |
+| `lang` | VARCHAR(10) | No | ja / en 等 (許容値は support 側の定数) |
+| `title` | VARCHAR(200) | No |  |
+| `body` | TEXT | No |  |
+| `updated_at` | TIMESTAMPTZ | No | trigger で自動更新 |
 <!-- END GENERATED: announcement_translations -->
 
 **設計判断:**
@@ -68,14 +68,14 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 <!-- BEGIN GENERATED: inquiries -->
 | カラム名 | 型 | Nullable | 説明 |
 |---|---|---|---|
-| `inquiry_id` | BIGINT (IDENTITY) | No | 自動採番 |
-| `title` | VARCHAR(100) | No | 件名 |
-| `body` | VARCHAR(4000) | No | 本文 |
-| `reply_email` | VARCHAR(255) | No | 返信先メールアドレス |
+| `inquiry_id` | BIGINT (IDENTITY) | No |  |
+| `title` | VARCHAR(100) | No |  |
+| `body` | VARCHAR(4000) | No |  |
+| `reply_email` | VARCHAR(255) | No |  |
 | `status` | VARCHAR(20) | No | new / in_progress / closed |
-| `internal_note` | TEXT | Yes | 運営向け対応メモ（プレイヤーからは参照不可） |
-| `created_at` | TIMESTAMPTZ | No | 受付日時 |
-| `updated_at` | TIMESTAMPTZ | No | 更新日時 |
+| `internal_note` | TEXT | Yes | 運営向けメモ (プレイヤーは参照不可) |
+| `created_at` | TIMESTAMPTZ | No |  |
+| `updated_at` | TIMESTAMPTZ | No |  |
 <!-- END GENERATED: inquiries -->
 
 **設計判断:**

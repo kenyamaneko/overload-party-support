@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/service/announcement"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 )
 
 var fixedNow = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
@@ -29,13 +29,13 @@ func TestList_仕様_langバリデーション(t *testing.T) {
 	}{
 		{
 			name:          "ja",
-			lang:          apisupport.LangJa,
+			lang:          domain.LangJa,
 			wantErr:       nil,
 			wantCallCount: 1,
 		},
 		{
 			name:          "en",
-			lang:          apisupport.LangEn,
+			lang:          domain.LangEn,
 			wantErr:       nil,
 			wantCallCount: 1,
 		},
@@ -64,9 +64,9 @@ func TestList_仕様_langバリデーション(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var callCount int
 			repo := &port.MockAnnouncementRepo{
-				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]apisupport.AnnouncementSummary, error) {
+				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
 					callCount++
-					return []apisupport.AnnouncementSummary{}, nil
+					return []domain.AnnouncementSummary{}, nil
 				},
 			}
 			_, err := announcement.New(repo, nowFixed).List(context.Background(), tc.lang)
@@ -79,21 +79,21 @@ func TestList_仕様_langバリデーション(t *testing.T) {
 
 // 仕様: List は repo に lang と now を透過し、結果をそのまま返す。
 func TestList_仕様_repoへの透過とレスポンス透過(t *testing.T) {
-	want := []apisupport.AnnouncementSummary{{AnnouncementID: 1, Type: apisupport.TypeInfo, Title: "T", PublishedAt: fixedNow}}
+	want := []domain.AnnouncementSummary{{AnnouncementID: 1, Type: domain.TypeInfo, Title: "T", PublishedAt: fixedNow}}
 	var gotLang string
 	var gotNow time.Time
 	repo := &port.MockAnnouncementRepo{
-		ListPublishedFn: func(_ context.Context, lang string, now time.Time) ([]apisupport.AnnouncementSummary, error) {
+		ListPublishedFn: func(_ context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
 			gotLang = lang
 			gotNow = now
 			return want, nil
 		},
 	}
-	got, err := announcement.New(repo, nowFixed).List(context.Background(), apisupport.LangEn)
+	got, err := announcement.New(repo, nowFixed).List(context.Background(), domain.LangEn)
 
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
-	assert.Equal(t, apisupport.LangEn, gotLang)
+	assert.Equal(t, domain.LangEn, gotLang)
 	assert.Equal(t, fixedNow, gotNow)
 }
 
@@ -112,28 +112,28 @@ func TestGetDetail_仕様_langバリデーションとエラー透過(t *testing
 	}{
 		{
 			name:     "ja 成功",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			repoErr:  nil,
 			wantErr:  nil,
 			wantCall: true,
 		},
 		{
 			name:     "en 成功",
-			lang:     apisupport.LangEn,
+			lang:     domain.LangEn,
 			repoErr:  nil,
 			wantErr:  nil,
 			wantCall: true,
 		},
 		{
 			name:     "repo の not found は service の ErrNotFound にマップ",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			repoErr:  port.ErrNotFound,
 			wantErr:  announcement.ErrNotFound,
 			wantCall: true,
 		},
 		{
 			name:     "repo の DB 障害を透過 (500 系)",
-			lang:     apisupport.LangJa,
+			lang:     domain.LangJa,
 			repoErr:  dbErr,
 			wantErr:  dbErr,
 			wantCall: true,
@@ -159,12 +159,12 @@ func TestGetDetail_仕様_langバリデーションとエラー透過(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			var called bool
 			repo := &port.MockAnnouncementRepo{
-				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*apisupport.AnnouncementDetail, error) {
+				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
 					called = true
 					if tc.repoErr != nil {
 						return nil, tc.repoErr
 					}
-					return &apisupport.AnnouncementDetail{AnnouncementID: 1}, nil
+					return &domain.AnnouncementDetail{AnnouncementID: 1}, nil
 				},
 			}
 			_, err := announcement.New(repo, nowFixed).GetDetail(context.Background(), 1, tc.lang)

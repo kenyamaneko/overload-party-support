@@ -16,7 +16,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kenyamaneko/overload-party-support/internal/adapter/sendgrid"
+	"github.com/kenyamaneko/overload-party-support/internal/adapter/sendgrid/sendgridnoop"
 	"github.com/kenyamaneko/overload-party-support/internal/adapter/slack"
+	"github.com/kenyamaneko/overload-party-support/internal/adapter/slack/slacknoop"
 	"github.com/kenyamaneko/overload-party-support/internal/config"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/admin"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/external"
@@ -24,9 +26,9 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
 	"github.com/kenyamaneko/overload-party-support/internal/router"
-	"github.com/kenyamaneko/overload-party-support/internal/service/announcement"
-	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/service/announcement_admin"
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
+	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/usecase/announcement_admin"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 )
 
 func main() {
@@ -63,14 +65,14 @@ func run() error {
 		return fmt.Errorf("build email sender: %w", err)
 	}
 
-	announcementSvc := announcement.New(announcementRepo, time.Now)
-	announcementAdminSvc := announcementadmin.New(announcementRepo, time.Now)
-	inquirySvc := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
+	announcementUC := announcement.New(announcementRepo, time.Now)
+	announcementAdminUC := announcementadmin.New(announcementRepo, time.Now)
+	inquiryUC := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
 
-	announcementH := rest.NewAnnouncementHandler(announcementSvc)
-	inquiryH := rest.NewInquiryHandler(inquirySvc)
-	externalH := external.NewInquiryHandler(inquirySvc)
-	adminH, err := admin.NewHandler(announcementAdminSvc, time.Now)
+	announcementH := rest.NewAnnouncementHandler(announcementUC)
+	inquiryH := rest.NewInquiryHandler(inquiryUC)
+	externalH := external.NewInquiryHandler(inquiryUC)
+	adminH, err := admin.NewHandler(announcementAdminUC, time.Now)
 	if err != nil {
 		return fmt.Errorf("build admin handler: %w", err)
 	}
@@ -101,18 +103,18 @@ func run() error {
 	return runAll(ctx, internalSrv, adminSrv, externalSrv)
 }
 
-// pickSlackNotifier は ENV に応じて real / mock を選択する (ARCHITECTURE.md クライアント注入境界)。
+// pickSlackNotifier は ENV に応じて real / noop を選択する (ARCHITECTURE.md クライアント注入境界)。
 func pickSlackNotifier(cfg *config.Config) port.SlackNotifier {
 	if cfg.Env == config.EnvLocal {
-		return slack.NewMockNotifier()
+		return slacknoop.New()
 	}
 	return slack.NewRealNotifier(cfg.SlackBotToken, cfg.SlackChannelID)
 }
 
-// pickEmailSender は ENV に応じて real / mock を選択する。
+// pickEmailSender は ENV に応じて real / noop を選択する。
 func pickEmailSender(cfg *config.Config) (port.EmailSender, error) {
 	if cfg.Env == config.EnvLocal {
-		return sendgrid.NewMockSender(), nil
+		return sendgridnoop.New(), nil
 	}
 	return sendgrid.NewRealSender(cfg.SendGridAPIKey, cfg.SendGridFromAddress, cfg.SendGridFromName)
 }

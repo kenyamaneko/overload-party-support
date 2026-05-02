@@ -14,8 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/service/announcement"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
@@ -60,8 +61,8 @@ func TestAnnouncementList_仕様_langバリデーション(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
-				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]apisupport.AnnouncementSummary, error) {
-					return []apisupport.AnnouncementSummary{}, nil
+				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
+					return []domain.AnnouncementSummary{}, nil
 				},
 			}
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
@@ -78,7 +79,7 @@ func TestAnnouncementList_仕様_langバリデーション(t *testing.T) {
 // 仕様: List レスポンスは {"announcements": [...]} 形式、0 件でも nil でなく空配列。
 func TestAnnouncementList_仕様_空配列レスポンス(t *testing.T) {
 	repo := &port.MockAnnouncementRepo{
-		ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]apisupport.AnnouncementSummary, error) {
+		ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
 			return nil, nil
 		},
 	}
@@ -154,11 +155,11 @@ func TestAnnouncementGetDetail_仕様_HTTPマッピング(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
-				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*apisupport.AnnouncementDetail, error) {
+				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
 					if tc.repoErr != nil {
 						return nil, tc.repoErr
 					}
-					return &apisupport.AnnouncementDetail{AnnouncementID: 1, Type: apisupport.TypeInfo}, nil
+					return &domain.AnnouncementDetail{AnnouncementID: 1, Type: domain.TypeInfo}, nil
 				},
 			}
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))

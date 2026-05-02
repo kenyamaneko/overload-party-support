@@ -64,7 +64,7 @@ support 側の `iapMiddleware` はヘッダ存在確認と context への email 
 レイヤー配置は他の delivery 経路（REST）と同じく Clean Architecture に従う:
 
 - **handler 層**: 管理 UI の HTTP ルーティング・IAP middleware・テンプレート描画を担当する。REST handler とは別ルータを構築する（3 ポート構成）
-- **service 層**: お知らせ CRUD ユースケースは管理 UI handler と将来的な REST handler が共通で呼ぶ。UI 固有のロジックを service に持たせない
+- **usecase 層**: お知らせ CRUD ユースケースは管理 UI handler と将来的な REST handler が共通で呼ぶ。UI 固有のロジックを usecase に持たせない
 - **repository 層**: 管理 UI は同じ repo を読み書きするだけで、admin 固有の SQL を持たない
 - **テンプレート / static**: handler 層に同居し `embed.FS` でバイナリに同梱する
 
@@ -108,7 +108,7 @@ DB 書き込みは INSERT 1 件で完結する（purchaseToken のような外�
 
 ## Slack / SendGrid クライアントの注入境界
 
-Slack 通知・SendGrid 送信は **adapter 層のクライアント** として注入する。service 層は `port.SlackNotifier` / `port.EmailSender` を介して呼び、具体実装を知らない。
+Slack 通知・SendGrid 送信は **adapter 層のクライアント** として注入する。usecase 層は `port.SlackNotifier` / `port.EmailSender` を介して呼び、具体実装を知らない。
 
 - `ENV=local` では両 port にモック実装を注入し、外部送信を抑止する（Slack / SendGrid の dev token を開発者 PC に配布しなくて済む）
 - slack-commands との契約は「support → Slack にメッセージ投稿」「slack-commands → support の内部 API 呼び出し」の 2 方向で、相互に REST / webhook で切り離す。Slack bot token は slack-commands 側が管理し、support は投稿 API のラッパ利用のみ

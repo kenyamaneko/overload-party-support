@@ -10,38 +10,38 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/service/announcement_admin"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/usecase/announcement_admin"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // adminListItem は一覧画面描画用のビューモデル。
 type adminListItem struct {
-	Announcement apisupport.Announcement
-	DisplayTitle string // ja タイトル (無ければ空でプレースホルダ表示)
-	LangsLabel   string // 存在する翻訳言語 (例: "ja, en")
-	State        string // draft / scheduled / published / expired
+	Announcement domain.Announcement
+	DisplayTitle string                     // ja タイトル (無ければ空でプレースホルダ表示)
+	LangsLabel   string                     // 存在する翻訳言語 (例: "ja, en")
+	State        string
 }
 
 // Handler は管理 UI の HTTP エンドポイント群を提供する。
 type Handler struct {
-	svc *announcementadmin.Service
+	uc *announcementadmin.Usecase
 	tpl *templates
 	now func() time.Time
 }
 
 // NewHandler は Handler を生成する。テンプレート初期化を起動時に 1 回だけ行う。
-func NewHandler(svc *announcementadmin.Service, now func() time.Time) (*Handler, error) {
+func NewHandler(uc *announcementadmin.Usecase, now func() time.Time) (*Handler, error) {
 	tpl, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{svc: svc, tpl: tpl, now: now}, nil
+	return &Handler{uc: uc, tpl: tpl, now: now}, nil
 }
 
 // List は `GET /admin/announcements` を処理する (FEATURE_SPEC §6.1)。
 func (h *Handler) List(c *gin.Context) {
 	filter := c.Query("status")
-	items, err := h.svc.List(c.Request.Context(), filter)
+	items, err := h.uc.List(c.Request.Context(), filter)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -67,7 +67,7 @@ func (h *Handler) NewForm(c *gin.Context) {
 	data := gin.H{
 		"Title":    "お知らせ作成",
 		"Reviewer": Reviewer(c),
-		"Types":    apisupport.Types,
+		"Types":    domain.Types,
 	}
 	renderPage(c, h.tpl.new, data)
 }
@@ -91,7 +91,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	id, err := h.svc.Create(c.Request.Context(), announcementadmin.CreateParams{
+	id, err := h.uc.Create(c.Request.Context(), domain.CreateAnnouncementParams{
 		Type:         c.PostForm("type"),
 		PublishedAt:  publishedAt,
 		ExpiresAt:    expiresAt,
@@ -106,9 +106,9 @@ func (h *Handler) Create(c *gin.Context) {
 
 // collectCreateTranslations は作成フォームから ja (必須) と en (任意) の翻訳を取り出す。
 // en は title / body のどちらかだけ埋めたフォーム (XOR) を早期に 400 にする。
-func collectCreateTranslations(c *gin.Context) ([]announcementadmin.TranslationInput, error) {
-	translations := []announcementadmin.TranslationInput{
-		{Lang: apisupport.LangJa, Title: c.PostForm("ja_title"), Body: c.PostForm("ja_body")},
+func collectCreateTranslations(c *gin.Context) ([]domain.TranslationInput, error) {
+	translations := []domain.TranslationInput{
+		{Lang: domain.LangJa, Title: c.PostForm("ja_title"), Body: c.PostForm("ja_body")},
 	}
 	enTitle := c.PostForm("en_title")
 	enBody := c.PostForm("en_body")
@@ -116,7 +116,7 @@ func collectCreateTranslations(c *gin.Context) ([]announcementadmin.TranslationI
 	case enTitle == "" && enBody == "":
 		return translations, nil
 	case enTitle != "" && enBody != "":
-		return append(translations, announcementadmin.TranslationInput{Lang: apisupport.LangEn, Title: enTitle, Body: enBody}), nil
+		return append(translations, domain.TranslationInput{Lang: domain.LangEn, Title: enTitle, Body: enBody}), nil
 	default:
 		return nil, fmt.Errorf("en_title and en_body must both be provided: %w", announcementadmin.ErrInvalidField)
 	}
@@ -128,7 +128,7 @@ func (h *Handler) GetEdit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	aw, err := h.svc.Get(c.Request.Context(), id)
+	aw, err := h.uc.Get(c.Request.Context(), id)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -138,8 +138,8 @@ func (h *Handler) GetEdit(c *gin.Context) {
 		"Reviewer":     Reviewer(c),
 		"Announcement": aw.Announcement,
 		"Translations": aw.Translations,
-		"Types":        apisupport.Types,
-		"Langs":        apisupport.SupportedLangs,
+		"Types":        domain.Types,
+		"Langs":        domain.SupportedLangs,
 	}
 	renderPage(c, h.tpl.edit, data)
 }
@@ -161,7 +161,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Update(c.Request.Context(), id, announcementadmin.UpdateParams{
+	if err := h.uc.Update(c.Request.Context(), id, domain.UpdateAnnouncementParams{
 		Type:        c.PostForm("type"),
 		PublishedAt: publishedAt,
 		ExpiresAt:   expiresAt,
@@ -178,7 +178,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+	if err := h.uc.Delete(c.Request.Context(), id); err != nil {
 		respondError(c, err)
 		return
 	}
@@ -201,7 +201,7 @@ func (h *Handler) UpsertTranslation(c *gin.Context) {
 	title := c.PostForm("title")
 	body := c.PostForm("body")
 
-	if err := h.svc.UpsertTranslation(c.Request.Context(), id, lang, title, body); err != nil {
+	if err := h.uc.UpsertTranslation(c.Request.Context(), id, lang, title, body); err != nil {
 		respondError(c, err)
 		return
 	}
@@ -253,12 +253,12 @@ func renderPage(c *gin.Context, tpl *template.Template, data any) {
 }
 
 // toAdminListItem は AnnouncementWithTranslations から一覧表示用のビューモデルを作る。
-func toAdminListItem(aw apisupport.AnnouncementWithTranslations, now time.Time) adminListItem {
+func toAdminListItem(aw domain.AnnouncementWithTranslations, now time.Time) adminListItem {
 	var displayTitle string
 	langs := make([]string, 0, len(aw.Translations))
 	for _, t := range aw.Translations {
 		langs = append(langs, t.Lang)
-		if t.Lang == apisupport.LangJa {
+		if t.Lang == domain.LangJa {
 			displayTitle = t.Title
 		}
 	}
@@ -273,30 +273,17 @@ func toAdminListItem(aw apisupport.AnnouncementWithTranslations, now time.Time) 
 		Announcement: aw.Announcement,
 		DisplayTitle: displayTitle,
 		LangsLabel:   langsLabel,
-		State:        deriveState(aw.Announcement, now),
+		State:        announcementadmin.DeriveState(aw.Announcement, now),
 	}
 }
 
 // displayTitle は編集画面の <title> 用文字列。ja 翻訳があればそのタイトル、無ければ ID。
-func displayTitle(aw *apisupport.AnnouncementWithTranslations) string {
+func displayTitle(aw *domain.AnnouncementWithTranslations) string {
 	for _, t := range aw.Translations {
-		if t.Lang == apisupport.LangJa {
+		if t.Lang == domain.LangJa {
 			return t.Title
 		}
 	}
 	return fmt.Sprintf("announcement %d", aw.Announcement.AnnouncementID)
 }
 
-// deriveState は本体属性から表示用の状態ラベルを導出する (FEATURE_SPEC §6.3)。
-func deriveState(a apisupport.Announcement, now time.Time) string {
-	if a.PublishedAt == nil {
-		return "draft"
-	}
-	if a.PublishedAt.After(now) {
-		return "scheduled"
-	}
-	if a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
-		return "expired"
-	}
-	return "published"
-}

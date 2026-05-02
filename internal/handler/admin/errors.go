@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/service/announcement_admin"
+	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/usecase/announcement_admin"
 )
 
 // errorStatus はサービス層のエラーを HTTP ステータスにマップする。

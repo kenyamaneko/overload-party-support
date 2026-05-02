@@ -10,12 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 var _ port.EmailSender = (*RealSender)(nil)
@@ -72,8 +71,9 @@ func NewRealSender(apiKey, fromAddress, fromName string) (*RealSender, error) {
 }
 
 // SendInquiryReceipt は受付確認メールを SendGrid 経由で送信する (FEATURE_SPEC §7.2)。
-func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *apisupport.Inquiry) error {
-	bodyText, err := s.renderBody(inq)
+// snippet は service 側で確定済みの本文抜粋。adapter は文字列をテンプレートに流すだけ。
+func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *domain.Inquiry, snippet string) error {
+	bodyText, err := s.renderBody(inq, snippet)
 	if err != nil {
 		return err
 	}
@@ -118,33 +118,25 @@ func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *apisupport.Inq
 }
 
 // renderBody は本文テンプレートを評価する。
-func (s *RealSender) renderBody(inq *apisupport.Inquiry) (string, error) {
-	data := templateData(inq)
+func (s *RealSender) renderBody(inq *domain.Inquiry, snippet string) (string, error) {
 	var buf bytes.Buffer
-	if err := s.bodyTmpl.Execute(&buf, data); err != nil {
+	if err := s.bodyTmpl.Execute(&buf, templateData(inq, snippet)); err != nil {
 		return "", fmt.Errorf("render receipt body: %w", err)
 	}
 	return buf.String(), nil
 }
 
 // renderSubject は件名テンプレートを評価する。
-func (s *RealSender) renderSubject(inq *apisupport.Inquiry) (string, error) {
-	data := templateData(inq)
+func (s *RealSender) renderSubject(inq *domain.Inquiry) (string, error) {
 	var buf bytes.Buffer
-	if err := s.subjectTmpl.Execute(&buf, data); err != nil {
+	if err := s.subjectTmpl.Execute(&buf, templateData(inq, "")); err != nil {
 		return "", fmt.Errorf("render receipt subject: %w", err)
 	}
 	return buf.String(), nil
 }
 
-// templateData はテンプレート評価用のビューモデル (snippet を本文から導出)。
-func templateData(inq *apisupport.Inquiry) map[string]any {
-	const snippetLen = 400
-	runes := []rune(inq.Body)
-	snippet := inq.Body
-	if len(runes) > snippetLen {
-		snippet = string(runes[:snippetLen]) + "…"
-	}
+// templateData はテンプレート評価用のビューモデル。snippet は service が確定済み。
+func templateData(inq *domain.Inquiry, snippet string) map[string]any {
 	return map[string]any{
 		"InquiryID":   inq.InquiryID,
 		"Title":       inq.Title,
@@ -153,21 +145,3 @@ func templateData(inq *apisupport.Inquiry) map[string]any {
 		"BodySnippet": snippet,
 	}
 }
-
-// MockSender は local 環境用のダミー実装。外部送信は行わない。
-type MockSender struct{}
-
-// NewMockSender は MockSender を生成する。
-func NewMockSender() *MockSender { return &MockSender{} }
-
-// SendInquiryReceipt はログ出力のみ。
-func (s *MockSender) SendInquiryReceipt(ctx context.Context, inq *apisupport.Inquiry) error {
-	slog.Info("sendgrid mock: receipt email",
-		"inquiry_id", inq.InquiryID,
-		"to", inq.ReplyEmail,
-		"title", inq.Title,
-	)
-	return nil
-}
-
-var _ port.EmailSender = (*MockSender)(nil)

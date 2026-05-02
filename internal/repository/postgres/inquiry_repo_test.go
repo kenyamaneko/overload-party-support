@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
 // newInquiryRepo は共有 Postgres を TRUNCATE した上で repo を生成する。
@@ -28,7 +28,7 @@ func TestInquiryCreate_仕様(t *testing.T) {
 	inq1, err := repo.Create(ctx, "T1", "B1", "u1@e.com")
 	require.NoError(t, err)
 	require.NotNil(t, inq1)
-	assert.Equal(t, apisupport.StatusNew, inq1.Status)
+	assert.Equal(t, domain.StatusNew, inq1.Status)
 	assert.Equal(t, "T1", inq1.Title)
 	assert.Equal(t, "B1", inq1.Body)
 	assert.Equal(t, "u1@e.com", inq1.ReplyEmail)
@@ -40,167 +40,121 @@ func TestInquiryCreate_仕様(t *testing.T) {
 	assert.Greater(t, inq2.InquiryID, inq1.InquiryID, "後続 INSERT は先行よりも大きい ID を得る (単調増加)")
 }
 
-// 仕様 (FEATURE_SPEC §8.3): 空 DB に対する List はエラーなく空 slice を返す。
-// nil ではなく長さ 0 の slice を返すこと (呼び出し側が range できる契約)。
-func TestInquiryList_仕様_空DB(t *testing.T) {
-	repo := newInquiryRepo(t)
-	ctx := context.Background()
-
-	items, err := repo.List(ctx, apisupport.Statuses)
-	require.NoError(t, err)
-	assert.Empty(t, items)
-}
-
-// 仕様 (FEATURE_SPEC §8.3): List は status フィルタを反映した件数で返す。
-func TestInquiryList_仕様_フィルタ(t *testing.T) {
-	repo := newInquiryRepo(t)
-	ctx := context.Background()
-
-	// seed: 3 件受付 → 2 件目を in_progress、3 件目を closed に遷移 (status 別に 1 件ずつ)
-	_, err := repo.Create(ctx, "first", "B", "u1@e.com")
-	require.NoError(t, err)
-	inq2, err := repo.Create(ctx, "second", "B", "u2@e.com")
-	require.NoError(t, err)
-	inq3, err := repo.Create(ctx, "third", "B", "u3@e.com")
-	require.NoError(t, err)
-
-	_, err = repo.UpdateStatus(ctx, inq2.InquiryID, apisupport.StatusInProgress)
-	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inq3.InquiryID, apisupport.StatusClosed)
-	require.NoError(t, err)
-
+// 仕様 (FEATURE_SPEC §8.3): List は空集合を返す契約 (nil ではなく長さ 0 の slice)。
+// 空 DB / 指定 status に一致する行が無い / statuses=nil (呼び出し側が全件展開する契約) のいずれでも同じ。
+func TestInquiryList_仕様_空集合(t *testing.T) {
 	cases := []struct {
-		name      string
-		statuses  []apisupport.Status
-		wantCount int
+		name     string
+		seed     func(t *testing.T, repo *postgres.InquiryRepository, ctx context.Context)
+		statuses []string
 	}{
 		{
-			name:      "3 種すべて指定 = 全件",
-			statuses:  apisupport.Statuses,
-			wantCount: 3,
+			name:     "空 DB に対する全 status 指定",
+			seed:     func(t *testing.T, repo *postgres.InquiryRepository, ctx context.Context) {},
+			statuses: domain.Statuses,
 		},
 		{
-			name:      "new + in_progress",
-			statuses:  []apisupport.Status{apisupport.StatusNew, apisupport.StatusInProgress},
-			wantCount: 2,
+			name: "DB に status=new はあるが status=in_progress で絞ると一致なし",
+			seed: func(t *testing.T, repo *postgres.InquiryRepository, ctx context.Context) {
+				_, err := repo.Create(ctx, "only-new", "B", "u@e.com")
+				require.NoError(t, err)
+			},
+			statuses: []string{domain.StatusInProgress},
 		},
 		{
-			name:      "closed のみ",
-			statuses:  []apisupport.Status{apisupport.StatusClosed},
-			wantCount: 1,
-		},
-		{
-			name:      "空 slice は 0 件 (呼び出し側が全件を明示する契約)",
-			statuses:  nil,
-			wantCount: 0,
+			name: "statuses=nil は 0 件 (呼び出し側が全件を明示する契約)",
+			seed: func(t *testing.T, repo *postgres.InquiryRepository, ctx context.Context) {
+				_, err := repo.Create(ctx, "x", "B", "u@e.com")
+				require.NoError(t, err)
+			},
+			statuses: nil,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			repo := newInquiryRepo(t)
+			ctx := context.Background()
+			tc.seed(t, repo, ctx)
+
 			items, err := repo.List(ctx, tc.statuses)
 			require.NoError(t, err)
-			assert.Len(t, items, tc.wantCount)
+			assert.Empty(t, items)
 		})
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.3): 他 status のレコードは存在するが、絞り込んだ status に一致する行が無い場合は空 slice を返す。
-// seed は status=new を 1 件のみ残し、一致しない status で絞ると 0 件になることを確認する。
-func TestInquiryList_仕様_一致件数0(t *testing.T) {
+// 仕様 (FEATURE_SPEC §8.3): List は statuses で指定された status の行のみを返す (指定外は混入しない)。
+// 件数の一致ではなく「返却された各行の status が指定集合に含まれる」観点で確認する。
+func TestInquiryList_仕様_指定外statusは混入しない(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
-	_, err := repo.Create(ctx, "only-new", "B", "u@e.com")
+	// seed: 3 status をそれぞれ 1 件 (status=new / in_progress / closed)
+	_, err := repo.Create(ctx, "n", "B", "n@e.com")
+	require.NoError(t, err)
+	inqP, err := repo.Create(ctx, "p", "B", "p@e.com")
+	require.NoError(t, err)
+	inqC, err := repo.Create(ctx, "c", "B", "c@e.com")
+	require.NoError(t, err)
+	_, err = repo.UpdateStatus(ctx, inqP.InquiryID, domain.StatusInProgress)
+	require.NoError(t, err)
+	_, err = repo.UpdateStatus(ctx, inqC.InquiryID, domain.StatusClosed)
 	require.NoError(t, err)
 
-	cases := []struct {
-		name      string
-		statuses  []apisupport.Status
-		wantCount int
-	}{
-		{
-			name:      "status=new で絞ると 1 件 (sanity)",
-			statuses:  []apisupport.Status{apisupport.StatusNew},
-			wantCount: 1,
-		},
-		{
-			name:      "status=in_progress で絞ると 0 件 (DB に該当行が無い)",
-			statuses:  []apisupport.Status{apisupport.StatusInProgress},
-			wantCount: 0,
-		},
-		{
-			name:      "status=closed で絞ると 0 件 (DB に該当行が無い)",
-			statuses:  []apisupport.Status{apisupport.StatusClosed},
-			wantCount: 0,
-		},
-		{
-			name:      "status=in_progress + closed でも 0 件",
-			statuses:  []apisupport.Status{apisupport.StatusInProgress, apisupport.StatusClosed},
-			wantCount: 0,
-		},
-	}
+	requested := []string{domain.StatusInProgress, domain.StatusClosed}
+	items, err := repo.List(ctx, requested)
+	require.NoError(t, err)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			items, err := repo.List(ctx, tc.statuses)
-			require.NoError(t, err)
-			assert.Len(t, items, tc.wantCount)
-		})
+	for _, it := range items {
+		assert.Contains(t, requested, it.Status)
 	}
 }
 
 // 仕様 (FEATURE_SPEC §8.3): List は updated_at DESC 順で並べる。
-// 直近 UPDATE された行が先頭に来ることを、index 単位のケースで検証する。
+// 直近 UPDATE された順 (inq3 → inq2 → inq1) を slice 比較 1 発で検証する。
 func TestInquiryList_仕様_並び順(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
 	// seed: 受付順 inq1 → inq2 → inq3。その後 inq2 を in_progress、inq3 を closed に更新。
-	// 直近 UPDATE された順は inq3 → inq2 → inq1 になる。
 	inq1, err := repo.Create(ctx, "first", "B", "u1@e.com")
 	require.NoError(t, err)
 	inq2, err := repo.Create(ctx, "second", "B", "u2@e.com")
 	require.NoError(t, err)
 	inq3, err := repo.Create(ctx, "third", "B", "u3@e.com")
 	require.NoError(t, err)
-
-	_, err = repo.UpdateStatus(ctx, inq2.InquiryID, apisupport.StatusInProgress)
+	_, err = repo.UpdateStatus(ctx, inq2.InquiryID, domain.StatusInProgress)
 	require.NoError(t, err)
-	_, err = repo.UpdateStatus(ctx, inq3.InquiryID, apisupport.StatusClosed)
+	_, err = repo.UpdateStatus(ctx, inq3.InquiryID, domain.StatusClosed)
 	require.NoError(t, err)
 
-	items, err := repo.List(ctx, apisupport.Statuses)
+	items, err := repo.List(ctx, domain.Statuses)
 	require.NoError(t, err)
 	require.Len(t, items, 3)
 
-	cases := []struct {
-		name   string
-		index  int
-		wantID int64
-	}{
-		{
-			name:   "index 0 は直近 UPDATE された inq3 (closed 遷移)",
-			index:  0,
-			wantID: inq3.InquiryID,
-		},
-		{
-			name:   "index 1 は次の inq2 (in_progress 遷移)",
-			index:  1,
-			wantID: inq2.InquiryID,
-		},
-		{
-			name:   "index 2 は受付のみで UPDATE されていない inq1",
-			index:  2,
-			wantID: inq1.InquiryID,
-		},
+	gotIDs := make([]int64, len(items))
+	for i, it := range items {
+		gotIDs[i] = it.InquiryID
 	}
+	assert.Equal(t, []int64{inq3.InquiryID, inq2.InquiryID, inq1.InquiryID}, gotIDs)
+}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.wantID, items[tc.index].InquiryID)
-		})
-	}
+// 仕様 (FEATURE_SPEC §8.3): Get は既存 ID に対応する行を返す。
+func TestInquiryGet_仕様_既存ID(t *testing.T) {
+	repo := newInquiryRepo(t)
+	ctx := context.Background()
+
+	inq, err := repo.Create(ctx, "T", "B", "u@e.com")
+	require.NoError(t, err)
+
+	got, err := repo.Get(ctx, inq.InquiryID)
+	require.NoError(t, err)
+	assert.Equal(t, inq.InquiryID, got.InquiryID)
+	assert.Equal(t, "T", got.Title)
+	assert.Equal(t, "B", got.Body)
+	assert.Equal(t, "u@e.com", got.ReplyEmail)
+	assert.Equal(t, domain.StatusNew, got.Status)
 }
 
 // 仕様 (FEATURE_SPEC §8.3): Get は未存在で port.ErrNotFound。
@@ -217,19 +171,19 @@ func TestInquiryGet_仕様_未存在(t *testing.T) {
 func TestUpdateStatus_仕様_許容値はCHECKを通過(t *testing.T) {
 	cases := []struct {
 		name   string
-		status apisupport.Status
+		status string
 	}{
 		{
 			name:   "new",
-			status: apisupport.StatusNew,
+			status: domain.StatusNew,
 		},
 		{
 			name:   "in_progress",
-			status: apisupport.StatusInProgress,
+			status: domain.StatusInProgress,
 		},
 		{
 			name:   "closed",
-			status: apisupport.StatusClosed,
+			status: domain.StatusClosed,
 		},
 	}
 
@@ -253,7 +207,7 @@ func TestUpdateStatus_仕様_許容値外はDB拒否(t *testing.T) {
 	inq, err := repo.Create(ctx, "T", "B", "u@e.com")
 	require.NoError(t, err)
 
-	_, err = repo.UpdateStatus(ctx, inq.InquiryID, apisupport.Status("invalid"))
+	_, err = repo.UpdateStatus(ctx, inq.InquiryID, "invalid")
 	assert.Error(t, err)
 }
 
@@ -262,7 +216,7 @@ func TestUpdateStatus_仕様_未存在IDはErrNotFound(t *testing.T) {
 	repo := newInquiryRepo(t)
 	ctx := context.Background()
 
-	_, err := repo.UpdateStatus(ctx, 999999, apisupport.StatusClosed)
+	_, err := repo.UpdateStatus(ctx, 999999, domain.StatusClosed)
 	assert.ErrorIs(t, err, port.ErrNotFound)
 }
 

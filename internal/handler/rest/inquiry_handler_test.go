@@ -15,8 +15,9 @@ import (
 
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 func newInquiryEngine(h *rest.InquiryHandler) *gin.Engine {
@@ -62,7 +63,7 @@ func TestInquiryList_仕様_statusバリデーション(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				ListFn: func(_ context.Context, _ []apisupport.Status) ([]apisupport.Inquiry, error) {
+				ListFn: func(_ context.Context, _ []string) ([]domain.Inquiry, error) {
 					return nil, nil
 				},
 			}
@@ -83,43 +84,43 @@ func TestInquiryUpdateStatus_仕様_HTTPマッピング(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
-		current    apisupport.Status
+		current    string
 		wantStatus int
 	}{
 		{
 			name:       "new → in_progress は 200",
 			body:       `{"status":"in_progress"}`,
-			current:    apisupport.StatusNew,
+			current:    domain.StatusNew,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "new → closed は 200",
 			body:       `{"status":"closed"}`,
-			current:    apisupport.StatusNew,
+			current:    domain.StatusNew,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "未知値は 400",
 			body:       `{"status":"unknown"}`,
-			current:    apisupport.StatusNew,
+			current:    domain.StatusNew,
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "new 指定は 409 (逆遷移扱い)",
 			body:       `{"status":"new"}`,
-			current:    apisupport.StatusNew,
+			current:    domain.StatusNew,
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "closed → in_progress は 409",
 			body:       `{"status":"in_progress"}`,
-			current:    apisupport.StatusClosed,
+			current:    domain.StatusClosed,
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name:       "不正 JSON は 400",
 			body:       `{bad}`,
-			current:    apisupport.StatusNew,
+			current:    domain.StatusNew,
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -128,11 +129,11 @@ func TestInquiryUpdateStatus_仕様_HTTPマッピング(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
-					return &apisupport.Inquiry{InquiryID: 1, Status: tc.current, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
+					return &domain.Inquiry{InquiryID: 1, Status: tc.current, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 				},
-				UpdateStatusFn: func(_ context.Context, _ int64, s apisupport.Status) (*apisupport.Inquiry, error) {
-					return &apisupport.Inquiry{InquiryID: 1, Status: s, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+				UpdateStatusFn: func(_ context.Context, _ int64, s string) (*domain.Inquiry, error) {
+					return &domain.Inquiry{InquiryID: 1, Status: s, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 				},
 			}
 			h := rest.NewInquiryHandler(inquiry.New(store, nil, nil, 200))
@@ -179,11 +180,11 @@ func TestInquiryGetDetail_仕様_HTTPマッピング(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*apisupport.Inquiry, error) {
+				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
 					if tc.getErr != nil {
 						return nil, tc.getErr
 					}
-					return &apisupport.Inquiry{InquiryID: 1, Status: apisupport.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+					return &domain.Inquiry{InquiryID: 1, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 				},
 			}
 			h := rest.NewInquiryHandler(inquiry.New(store, nil, nil, 200))
@@ -200,7 +201,7 @@ func TestInquiryGetDetail_仕様_HTTPマッピング(t *testing.T) {
 // 仕様 (FEATURE_SPEC §8.3): List は updated_at DESC 順の結果を JSON 配列で返す。0 件でも nil でない。
 func TestInquiryList_仕様_空配列レスポンス(t *testing.T) {
 	store := &port.MockInquiryStore{
-		ListFn: func(_ context.Context, _ []apisupport.Status) ([]apisupport.Inquiry, error) {
+		ListFn: func(_ context.Context, _ []string) ([]domain.Inquiry, error) {
 			return nil, nil
 		},
 	}
@@ -221,8 +222,8 @@ func TestInquiryList_仕様_空配列レスポンス(t *testing.T) {
 func TestInquiryUpdateNote_仕様_レスポンス(t *testing.T) {
 	note := "running"
 	store := &port.MockInquiryStore{
-		UpdateNoteFn: func(_ context.Context, _ int64, got *string) (*apisupport.Inquiry, error) {
-			return &apisupport.Inquiry{InquiryID: 1, Status: apisupport.StatusNew, InternalNote: got, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+		UpdateNoteFn: func(_ context.Context, _ int64, got *string) (*domain.Inquiry, error) {
+			return &domain.Inquiry{InquiryID: 1, Status: domain.StatusNew, InternalNote: got, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 		},
 	}
 	h := rest.NewInquiryHandler(inquiry.New(store, nil, nil, 200))

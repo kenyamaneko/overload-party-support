@@ -9,18 +9,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
 // InquiryHandler は問い合わせフォームから直接呼ばれる受付 API。
 type InquiryHandler struct {
-	svc *inquiry.Service
+	uc *inquiry.Usecase
 }
 
 // NewInquiryHandler は InquiryHandler を生成する。
-func NewInquiryHandler(svc *inquiry.Service) *InquiryHandler {
-	return &InquiryHandler{svc: svc}
+func NewInquiryHandler(uc *inquiry.Usecase) *InquiryHandler {
+	return &InquiryHandler{uc: uc}
 }
 
 // Submit は `POST /api/v1/inquiries` を処理する (FEATURE_SPEC §7.1)。
@@ -31,7 +31,7 @@ func (h *InquiryHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	id, err := h.svc.Submit(c.Request.Context(), req.Title, req.Body, req.ReplyEmail)
+	id, err := h.uc.Submit(c.Request.Context(), req.Title, req.Body, req.ReplyEmail)
 	if err != nil {
 		slog.Warn("inquiry submit failed", "error", err)
 		c.JSON(submitErrorStatus(err), gin.H{"error": err.Error()})

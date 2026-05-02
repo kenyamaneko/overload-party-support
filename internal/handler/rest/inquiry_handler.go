@@ -8,18 +8,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // InquiryHandler は slack-commands が呼び出す問い合わせ管理 API。
 type InquiryHandler struct {
-	svc *inquiry.Service
+	uc *inquiry.Usecase
 }
 
 // NewInquiryHandler は InquiryHandler を生成する。
-func NewInquiryHandler(svc *inquiry.Service) *InquiryHandler {
-	return &InquiryHandler{svc: svc}
+func NewInquiryHandler(uc *inquiry.Usecase) *InquiryHandler {
+	return &InquiryHandler{uc: uc}
 }
 
 // List は `GET /internal/v1/inquiries?status=new,in_progress` を処理する (FEATURE_SPEC §8.3)。
@@ -30,25 +31,14 @@ func (h *InquiryHandler) List(c *gin.Context) {
 		statuses = strings.Split(statusRaw, ",")
 	}
 
-	items, err := h.svc.List(c.Request.Context(), statuses)
+	items, err := h.uc.List(c.Request.Context(), statuses)
 	if err != nil {
 		slog.Warn("inquiry list failed", "status", statusRaw, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
-	summaries := make([]apisupport.InquirySummary, 0, len(items))
-	for _, inq := range items {
-		summaries = append(summaries, apisupport.InquirySummary{
-			InquiryID:  inq.InquiryID,
-			Title:      inq.Title,
-			ReplyEmail: inq.ReplyEmail,
-			Status:     inq.Status,
-			CreatedAt:  inq.CreatedAt,
-			UpdatedAt:  inq.UpdatedAt,
-		})
-	}
-	c.JSON(http.StatusOK, apisupport.InquiryListResponse{Inquiries: summaries})
+	c.JSON(http.StatusOK, apisupport.InquiryListResponse{Inquiries: toInquirySummaryResponses(items)})
 }
 
 // GetDetail は `GET /internal/v1/inquiries/:inquiryId` を処理する。
@@ -57,7 +47,7 @@ func (h *InquiryHandler) GetDetail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	inq, err := h.svc.Get(c.Request.Context(), id)
+	inq, err := h.uc.Get(c.Request.Context(), id)
 	if err != nil {
 		slog.Warn("inquiry get failed", "inquiry_id", id, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
@@ -77,7 +67,7 @@ func (h *InquiryHandler) UpdateStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	inq, err := h.svc.UpdateStatus(c.Request.Context(), id, string(req.Status))
+	inq, err := h.uc.UpdateStatus(c.Request.Context(), id, req.Status)
 	if err != nil {
 		slog.Warn("inquiry update status failed", "inquiry_id", id, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
@@ -97,7 +87,7 @@ func (h *InquiryHandler) UpdateNote(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	inq, err := h.svc.UpdateNote(c.Request.Context(), id, req.InternalNote)
+	inq, err := h.uc.UpdateNote(c.Request.Context(), id, req.InternalNote)
 	if err != nil {
 		slog.Warn("inquiry update note failed", "inquiry_id", id, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
@@ -118,7 +108,7 @@ func parseInquiryID(c *gin.Context) (int64, bool) {
 }
 
 // toDetail はドメイン Inquiry を API レスポンス DTO に変換する。
-func toDetail(inq *apisupport.Inquiry) apisupport.InquiryDetail {
+func toDetail(inq *domain.Inquiry) apisupport.InquiryDetail {
 	return apisupport.InquiryDetail{
 		InquiryID:    inq.InquiryID,
 		Title:        inq.Title,
@@ -129,4 +119,21 @@ func toDetail(inq *apisupport.Inquiry) apisupport.InquiryDetail {
 		CreatedAt:    inq.CreatedAt,
 		UpdatedAt:    inq.UpdatedAt,
 	}
+}
+
+// toInquirySummaryResponses は domain.Inquiry の slice を InquirySummary 群へ詰め替える。
+// nil / 空集合の場合は長さ 0 の slice を返す (JSON で `[]` を保証する契約)。
+func toInquirySummaryResponses(items []domain.Inquiry) []apisupport.InquirySummary {
+	out := make([]apisupport.InquirySummary, 0, len(items))
+	for _, inq := range items {
+		out = append(out, apisupport.InquirySummary{
+			InquiryID:  inq.InquiryID,
+			Title:      inq.Title,
+			ReplyEmail: inq.ReplyEmail,
+			Status:     inq.Status,
+			CreatedAt:  inq.CreatedAt,
+			UpdatedAt:  inq.UpdatedAt,
+		})
+	}
+	return out
 }

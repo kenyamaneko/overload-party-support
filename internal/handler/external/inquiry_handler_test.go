@@ -16,8 +16,9 @@ import (
 
 	"github.com/kenyamaneko/overload-party-support/internal/handler/external"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/service/inquiry"
+	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 func newExternalEngine(h *external.InquiryHandler) *gin.Engine {
@@ -67,17 +68,17 @@ func TestSubmit_仕様_HTTPマッピング(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, title, body, replyEmail string) (*apisupport.Inquiry, error) {
-					return &apisupport.Inquiry{InquiryID: 1, Title: title, Body: body, ReplyEmail: replyEmail, Status: apisupport.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+				CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
+					return &domain.Inquiry{InquiryID: 1, Title: title, Body: body, ReplyEmail: replyEmail, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *apisupport.Inquiry, _ string) error {
+				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
 					return tc.slackErr
 				},
 			}
 			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *apisupport.Inquiry) error { return nil },
+				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
 			}
 			h := external.NewInquiryHandler(inquiry.New(store, slack, email, 200))
 
@@ -94,15 +95,15 @@ func TestSubmit_仕様_HTTPマッピング(t *testing.T) {
 // 仕様: 成功レスポンスは {"inquiry_id": <number>} 形式で、受付確認メールに使える ID を含む。
 func TestSubmit_仕様_成功レスポンス(t *testing.T) {
 	store := &port.MockInquiryStore{
-		CreateFn: func(_ context.Context, title, body, replyEmail string) (*apisupport.Inquiry, error) {
-			return &apisupport.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: apisupport.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+		CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
+			return &domain.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 		},
 	}
 	slack := &port.MockSlackNotifier{
-		NotifyInquiryReceivedFn: func(_ context.Context, _ *apisupport.Inquiry, _ string) error { return nil },
+		NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
 	}
 	email := &port.MockEmailSender{
-		SendInquiryReceiptFn: func(_ context.Context, _ *apisupport.Inquiry) error { return nil },
+		SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
 	}
 	h := external.NewInquiryHandler(inquiry.New(store, slack, email, 200))
 

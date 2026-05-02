@@ -1,5 +1,5 @@
-// Package slack は port.SlackNotifier の実装を提供する。
-// prod/staging では chat.postMessage API を叩く RealNotifier、local では MockNotifier を使う。
+// Package slack は port.SlackNotifier の prod/staging 実装 (chat.postMessage API) を提供する。
+// local 用の no-op 実装は slacknoop パッケージに分離されている。
 package slack
 
 import (
@@ -7,12 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
 var _ port.SlackNotifier = (*RealNotifier)(nil)
@@ -38,7 +37,7 @@ func NewRealNotifier(botToken, channelID string) *RealNotifier {
 // NotifyInquiryReceived は問い合わせ受付通知を運営チャンネルに投稿する (FEATURE_SPEC §9.1)。
 // Block Kit 構造と interactive button の action_id 命名は slack-commands 側の責務なので、
 // ここではプレーンな Block メッセージだけを送る (button は slack-commands で後付けされる想定)。
-func (n *RealNotifier) NotifyInquiryReceived(ctx context.Context, inq *apisupport.Inquiry, snippet string) error {
+func (n *RealNotifier) NotifyInquiryReceived(ctx context.Context, inq *domain.Inquiry, snippet string) error {
 	body := map[string]any{
 		"channel": n.channelID,
 		"text":    fmt.Sprintf("新しい問い合わせ #%d", inq.InquiryID),
@@ -86,21 +85,3 @@ func (n *RealNotifier) postJSON(ctx context.Context, url string, payload any) er
 	return nil
 }
 
-// MockNotifier は local 環境用のダミー実装。ログ出力のみで外部送信は行わない。
-type MockNotifier struct{}
-
-// NewMockNotifier は MockNotifier を生成する。
-func NewMockNotifier() *MockNotifier { return &MockNotifier{} }
-
-// NotifyInquiryReceived はログに出すだけで成功を返す。
-func (n *MockNotifier) NotifyInquiryReceived(ctx context.Context, inq *apisupport.Inquiry, snippet string) error {
-	slog.Info("slack mock: inquiry received",
-		"inquiry_id", inq.InquiryID,
-		"title", inq.Title,
-		"reply_email", inq.ReplyEmail,
-		"snippet", snippet,
-	)
-	return nil
-}
-
-var _ port.SlackNotifier = (*MockNotifier)(nil)
