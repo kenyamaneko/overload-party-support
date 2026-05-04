@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/kenyamaneko/overload-party-support/internal/presenter"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
-	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // InquiryHandler は slack-commands が呼び出す問い合わせ管理 API。
@@ -38,7 +38,7 @@ func (h *InquiryHandler) List(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, apisupport.InquiryListResponse{Inquiries: toInquirySummaryResponses(items)})
+	c.JSON(http.StatusOK, apisupport.InquiryListResponse{Inquiries: presenter.ToInquirySummaries(items)})
 }
 
 // GetDetail は `GET /internal/v1/inquiries/:inquiryId` を処理する。
@@ -53,7 +53,7 @@ func (h *InquiryHandler) GetDetail(c *gin.Context) {
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toDetail(inq))
+	c.JSON(http.StatusOK, presenter.ToInquiryDetail(inq))
 }
 
 // UpdateStatus は `POST /internal/v1/inquiries/:inquiryId/status` を処理する。
@@ -73,7 +73,7 @@ func (h *InquiryHandler) UpdateStatus(c *gin.Context) {
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toDetail(inq))
+	c.JSON(http.StatusOK, presenter.ToInquiryDetail(inq))
 }
 
 // UpdateNote は `POST /internal/v1/inquiries/:inquiryId/note` を処理する。
@@ -93,7 +93,7 @@ func (h *InquiryHandler) UpdateNote(c *gin.Context) {
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toDetail(inq))
+	c.JSON(http.StatusOK, presenter.ToInquiryDetail(inq))
 }
 
 // parseInquiryID はパスパラメータから inquiry_id を取り出す。不正なら 404 を即返して false。
@@ -105,34 +105,4 @@ func parseInquiryID(c *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-// toDetail はドメイン Inquiry を API レスポンス DTO に変換する。
-func toDetail(inq *domain.Inquiry) apisupport.InquiryDetail {
-	return apisupport.InquiryDetail{
-		InquiryID:    inq.InquiryID,
-		Title:        inq.Title,
-		Body:         inq.Body,
-		ReplyEmail:   inq.ReplyEmail,
-		Status:       inq.Status,
-		InternalNote: inq.InternalNote,
-		CreatedAt:    inq.CreatedAt,
-		UpdatedAt:    inq.UpdatedAt,
-	}
-}
-
-// toInquirySummaryResponses は domain.Inquiry の slice を InquirySummary 群へ詰め替える。
-func toInquirySummaryResponses(items []domain.Inquiry) []apisupport.InquirySummary {
-	out := make([]apisupport.InquirySummary, 0, len(items))
-	for _, inq := range items {
-		out = append(out, apisupport.InquirySummary{
-			InquiryID:  inq.InquiryID,
-			Title:      inq.Title,
-			ReplyEmail: inq.ReplyEmail,
-			Status:     inq.Status,
-			CreatedAt:  inq.CreatedAt,
-			UpdatedAt:  inq.UpdatedAt,
-		})
-	}
-	return out
 }

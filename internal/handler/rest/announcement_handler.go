@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kenyamaneko/overload-party-support/internal/domain"
+	"github.com/kenyamaneko/overload-party-support/internal/presenter"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
@@ -31,7 +31,7 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, apisupport.AnnouncementListResponse{Announcements: toAnnouncementSummaryResponses(items)})
+	c.JSON(http.StatusOK, apisupport.AnnouncementListResponse{Announcements: presenter.ToAnnouncementSummaries(items)})
 }
 
 // GetDetail は `GET /internal/v1/announcements/:announcementId?lang=<code>` を処理する。
@@ -51,32 +51,5 @@ func (h *AnnouncementHandler) GetDetail(c *gin.Context) {
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, toAnnouncementDetailResponse(detail))
-}
-
-// toAnnouncementSummaryResponses は domain の AnnouncementSummary を REST wire の
-// apisupport.AnnouncementSummary へ詰め替える。
-func toAnnouncementSummaryResponses(items []domain.AnnouncementSummary) []apisupport.AnnouncementSummary {
-	out := make([]apisupport.AnnouncementSummary, 0, len(items))
-	for _, it := range items {
-		out = append(out, apisupport.AnnouncementSummary{
-			AnnouncementID: it.AnnouncementID,
-			Type:           it.Type,
-			Title:          it.Title,
-			PublishedAt:    it.PublishedAt,
-		})
-	}
-	return out
-}
-
-// toAnnouncementDetailResponse は domain の AnnouncementDetail を REST wire の
-// apisupport.AnnouncementDetail へ詰め替える。
-func toAnnouncementDetailResponse(d *domain.AnnouncementDetail) apisupport.AnnouncementDetail {
-	return apisupport.AnnouncementDetail{
-		AnnouncementID: d.AnnouncementID,
-		Type:           d.Type,
-		Title:          d.Title,
-		Body:           d.Body,
-		PublishedAt:    d.PublishedAt,
-	}
+	c.JSON(http.StatusOK, presenter.ToAnnouncementDetail(detail))
 }
