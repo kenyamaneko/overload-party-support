@@ -57,10 +57,6 @@ support 側の `iapMiddleware` はヘッダ存在確認と context への email 
 
 ローカル開発では `iapMiddleware` がパススルーしヘッダ無しで通る。この分岐は `ENV` env var のみで制御し、コードフラグで制御しない（「production で誤ってスキップが有効になる」リスクを env 設定に集約）。
 
-## Presenter 層の位置づけ
-
-`internal/presenter/` は domain ↔ wire DTO (`packages/api-support`) の境界変換を集約するパッケージ。位置づけと将来の移行方針は overload-party-card の同名セクションを参照。
-
 ## HTMX レンダリング層の構造
 
 管理 UI は `html/template` + `embed.FS` でバイナリに埋め込まれた HTML を動的生成する。FE 成果物は独立に存在しない（news と同一パターン）。
