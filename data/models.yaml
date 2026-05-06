@@ -122,16 +122,6 @@ files:
           - {name: CreatedAt, type: time.Time}
           - {name: UpdatedAt, type: time.Time}
 
-  # ─── Inquiry enums (FEATURE_SPEC §8.1) ───────────────────────────────
-  - name: inquiry_enum
-    target: domain
-    constants:
-      - type: string
-        values:
-          - {name: StatusNew, value: "new"}
-          - {name: StatusInProgress, value: "in_progress"}
-          - {name: StatusClosed, value: "closed"}
-
   # ─── Wire types (REST request/response, gateway-shared) ──────────────
   - name: announcement_wire
     target: wire
@@ -176,42 +166,3 @@ files:
         comment: "SubmitInquiryResponse は `POST /api/v1/inquiries` の出力。"
         fields:
           - {name: InquiryID, type: int64, json: "inquiry_id"}
-
-      - name: InquirySummary
-        comment: "InquirySummary は `GET /internal/v1/inquiries` のレスポンス要素 (FEATURE_SPEC §8.3)。"
-        fields:
-          - {name: InquiryID, type: int64, json: "inquiry_id"}
-          - {name: Title, type: string, json: "title"}
-          - {name: ReplyEmail, type: string, json: "reply_email"}
-          - {name: Status, type: string, json: "status"}
-          - {name: CreatedAt, type: time.Time, json: "created_at"}
-          - {name: UpdatedAt, type: time.Time, json: "updated_at"}
-
-      - name: InquiryListResponse
-        comment: "InquiryListResponse は `GET /internal/v1/inquiries` のトップレベル JSON。"
-        fields:
-          - {name: Inquiries, type: "[]InquirySummary", json: "inquiries"}
-
-      - name: InquiryDetail
-        comment: "InquiryDetail は `GET /internal/v1/inquiries/:id` のレスポンス。internal_note を含む。"
-        fields:
-          - {name: InquiryID, type: int64, json: "inquiry_id"}
-          - {name: Title, type: string, json: "title"}
-          - {name: Body, type: string, json: "body"}
-          - {name: ReplyEmail, type: string, json: "reply_email"}
-          - {name: Status, type: string, json: "status"}
-          - {name: InternalNote, type: "*string", json: "internal_note"}
-          - {name: CreatedAt, type: time.Time, json: "created_at"}
-          - {name: UpdatedAt, type: time.Time, json: "updated_at"}
-
-      - name: UpdateInquiryStatusRequest
-        comment: "UpdateInquiryStatusRequest は `POST /internal/v1/inquiries/:id/status` の入力。"
-        fields:
-          - {name: Status, type: string, json: "status"}
-
-      - name: UpdateInquiryNoteRequest
-        comment: |
-          UpdateInquiryNoteRequest は `POST /internal/v1/inquiries/:id/note` の入力。
-          null / 空文字はメモ削除として扱う。
-        fields:
-          - {name: InternalNote, type: "*string", json: "internal_note"}

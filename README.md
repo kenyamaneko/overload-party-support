@@ -1,6 +1,6 @@
 # overload-party-support
 
-お知らせ配信と問い合わせ受付を行う内部マイクロサービス。内部 REST（gateway・slack-commands 向け）はポート 9009、運用者向け管理 UI は IAP 背後の 9109、外部問い合わせフォーム向け REST は 9209 で起動する。
+お知らせ配信と問い合わせ受付を行う内部マイクロサービス。内部 REST（gateway 向け）はポート 9009、運用者向け管理 UI は IAP 背後の 9109、外部問い合わせフォーム向け REST は 9209 で起動する。
 
 詳細は [機能仕様書](docs/FEATURE_SPEC.md) / [サービス設計書](docs/ARCHITECTURE.md) / [API仕様書](docs/API_REFERENCE.md) / [データ設計書](docs/DATA_DESIGN.md) を参照。
 
@@ -10,15 +10,12 @@
 Gateway
   └─ Support (:9009 internal REST)
        ├─ PostgreSQL (support スキーマ)
-       ├─ Slack    (ops/slack-commands 経由で運営チャンネルへ投稿)
+       ├─ Slack    (受付通知を運営チャンネルへ投稿)
        └─ SendGrid (問い合わせ者宛の受付確認メール)
-
-ops/slack-commands (gateway を経由しない)
-  └─ Slack → Support :9009 (問い合わせステータス更新 / 対応メモ更新)
 
 運用者ブラウザ
   └─ IAP (Google OAuth)
-       └─ Support (:9109 admin UI)  ← お知らせ CRUD
+       └─ Support (:9109 admin UI)  ← お知らせ CRUD / 問い合わせ管理
 
 問い合わせフォーム (gateway を経由しない)
   └─ Support (:9209 external REST)

@@ -69,7 +69,6 @@ func run() error {
 	inquiryUC := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
 
 	announcementH := rest.NewAnnouncementHandler(announcementUC)
-	inquiryH := rest.NewInquiryHandler(inquiryUC)
 	externalH := external.NewInquiryHandler(inquiryUC)
 	adminH, err := admin.NewHandler(announcementAdminUC, time.Now)
 	if err != nil {
@@ -78,7 +77,7 @@ func run() error {
 
 	internalSrv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.InternalPort),
-		Handler:           router.NewInternal(announcementH, inquiryH),
+		Handler:           router.NewInternal(announcementH),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	adminSrv := &http.Server{

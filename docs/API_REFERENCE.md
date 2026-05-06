@@ -7,7 +7,7 @@ support サービスは 3 つのポートで別種の API を提供する。
 
 | ポート | 用途 | 認証 |
 |---|---|---|
-| `:9009` | 内部 REST (gateway / slack-commands 向け) | ClusterIP 内部 |
+| `:9009` | 内部 REST (gateway 向け) | ClusterIP 内部 |
 | `:9109` | 管理 UI (運用者向けお知らせ CRUD) | IAP (Identity-Aware Proxy) |
 | `:9209` | 外部 REST (問い合わせフォーム向け) | なし（CORS で Origin 制限） |
 
@@ -94,115 +94,6 @@ gateway が ClusterIP 経由で呼び出す内部 API。お知らせは公開情
 | `400` | `lang` 欠落 / 対応外の言語コード |
 | `404` | お知らせが存在しない、または指定 `lang` の翻訳が存在しない |
 | `500` | DB エラー |
-
----
-
-## 問い合わせ管理 (internal REST — slack-commands → support, :9009)
-
-slack-commands service が Slack インタラクションを受けて support を呼び出す内部 API。
-
-### `GET /internal/v1/inquiries`
-
-**概要:** 問い合わせ一覧を返す（`updated_at DESC` 順、Slack 上での未対応・対応中リスト用）
-
-**認証:** ClusterIP（slack-commands 経由）
-
-**クエリパラメータ:**
-
-| 名前 | 型 | 必須 | デフォルト | 備考 |
-|---|---|---|---|---|
-| `status` | `string` | いいえ | 全件 | カンマ区切り。許容値: `new` / `in_progress` / `closed` |
-
-**レスポンス:** `{"inquiries": [...]}` — 要素型 `InquirySummary`
-
-| フィールド | 型 | 備考 |
-|---|---|---|
-| `inquiry_id` | `number` |  |
-| `title` | `string` |  |
-| `reply_email` | `string` |  |
-| `status` | `string` |  |
-| `created_at` | `string (ISO 8601)` |  |
-| `updated_at` | `string (ISO 8601)` |  |
-
-**エラー:**
-
-| ステータス | 理由 |
-|---|---|
-| `400` | 許容外の status 値 |
-| `500` | DB エラー |
-
----
-
-### `GET /internal/v1/inquiries/:inquiryId`
-
-**概要:** 問い合わせ詳細を返す（対応メモを含む）
-
-**認証:** ClusterIP
-
-**レスポンス:** `InquiryDetail`
-
-| フィールド | 型 | 備考 |
-|---|---|---|
-| `inquiry_id` | `number` |  |
-| `title` | `string` |  |
-| `body` | `string` |  |
-| `reply_email` | `string` |  |
-| `status` | `string` |  |
-| `internal_note` | `string?` | nullable |
-| `created_at` | `string (ISO 8601)` |  |
-| `updated_at` | `string (ISO 8601)` |  |
-
-**エラー:**
-
-| ステータス | 理由 |
-|---|---|
-| `404` | 問い合わせが存在しない |
-
----
-
-### `POST /internal/v1/inquiries/:inquiryId/status`
-
-**概要:** 問い合わせのステータスを更新
-
-**認証:** ClusterIP
-
-**リクエストボディ:** `UpdateInquiryStatusRequest`
-
-| フィールド | 型 | 必須 | 備考 |
-|---|---|---|---|
-| `status` | `string` | はい | 許容値: `in_progress` / `closed`。`new` は受付時の初期値として server が一度だけセットするため API からは指定不可 |
-
-**レスポンス:** `InquiryDetail`（更新後）
-
-**エラー:**
-
-| ステータス | 理由 |
-|---|---|
-| `400` | 許容外の status 値（`new` 指定・未知値など） |
-| `404` | 問い合わせが存在しない |
-| `409` | 許容しない状態遷移（例: `closed` → `in_progress`） |
-
----
-
-### `POST /internal/v1/inquiries/:inquiryId/note`
-
-**概要:** 対応メモを更新
-
-**認証:** ClusterIP
-
-**リクエストボディ:** `UpdateInquiryNoteRequest`
-
-| フィールド | 型 | 必須 | 備考 |
-|---|---|---|---|
-| `internal_note` | `string?` | いいえ | null / 空文字はメモ削除扱い |
-
-**レスポンス:** `InquiryDetail`（更新後）
-
-**エラー:**
-
-| ステータス | 理由 |
-|---|---|
-| `404` | 問い合わせが存在しない |
 
 ---
 

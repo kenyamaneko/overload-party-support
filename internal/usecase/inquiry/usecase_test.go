@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
-	"github.com/kenyamaneko/overload-party-support/internal/domain"
 )
 
 // 仕様 (FEATURE_SPEC §7.1): Submit はバリデーション失敗時に副作用 (repo/slack/email) を一切呼ばない。
@@ -98,7 +98,7 @@ func TestSubmit_InputValidation(t *testing.T) {
 			store := &port.MockInquiryStore{
 				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
 					createCalled = true
-					return newInquiry(1, domain.StatusNew), nil
+					return newInquiry(1), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
@@ -183,7 +183,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 					if tc.createErr != nil {
 						return nil, tc.createErr
 					}
-					return newInquiry(1, domain.StatusNew), nil
+					return newInquiry(1), nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
@@ -243,7 +243,7 @@ func TestSubmit_SnippetLength(t *testing.T) {
 			var gotSnippet string
 			store := &port.MockInquiryStore{
 				CreateFn: func(_ context.Context, _ string, body string, _ string) (*domain.Inquiry, error) {
-					inq := newInquiry(1, domain.StatusNew)
+					inq := newInquiry(1)
 					inq.Body = body
 					return inq, nil
 				},
@@ -266,369 +266,14 @@ func TestSubmit_SnippetLength(t *testing.T) {
 	}
 }
 
-// 仕様 (FEATURE_SPEC §8.1): ステータス遷移表を厳密に守る (new への遷移は server 初期値のみで常に不可)。
-func TestUpdateStatus_TransitionTable(t *testing.T) {
-	cases := []struct {
-		name      string
-		current   string
-		target    string
-		wantErr   error
-		wantWrite bool
-	}{
-		{
-			name:      "new → in_progress",
-			current:   domain.StatusNew,
-			target:    domain.StatusInProgress,
-			wantErr:   nil,
-			wantWrite: true,
-		},
-		{
-			name:      "new → closed",
-			current:   domain.StatusNew,
-			target:    domain.StatusClosed,
-			wantErr:   nil,
-			wantWrite: true,
-		},
-		{
-			name:      "in_progress → closed",
-			current:   domain.StatusInProgress,
-			target:    domain.StatusClosed,
-			wantErr:   nil,
-			wantWrite: true,
-		},
-		{
-			name:      "new → new 不可",
-			current:   domain.StatusNew,
-			target:    domain.StatusNew,
-			wantErr:   inquiry.ErrInvalidStatusTransition,
-			wantWrite: false,
-		},
-		{
-			name:      "in_progress → new 不可",
-			current:   domain.StatusInProgress,
-			target:    domain.StatusNew,
-			wantErr:   inquiry.ErrInvalidStatusTransition,
-			wantWrite: false,
-		},
-		{
-			name:      "closed → in_progress 不可",
-			current:   domain.StatusClosed,
-			target:    domain.StatusInProgress,
-			wantErr:   inquiry.ErrInvalidStatusTransition,
-			wantWrite: false,
-		},
-		{
-			name:      "closed → closed 不可",
-			current:   domain.StatusClosed,
-			target:    domain.StatusClosed,
-			wantErr:   inquiry.ErrInvalidStatusTransition,
-			wantWrite: false,
-		},
-		{
-			name:      "closed → new 不可",
-			current:   domain.StatusClosed,
-			target:    domain.StatusNew,
-			wantErr:   inquiry.ErrInvalidStatusTransition,
-			wantWrite: false,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var wrote bool
-			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
-					return newInquiry(1, tc.current), nil
-				},
-				UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
-					wrote = true
-					return newInquiry(1, tc.target), nil
-				},
-			}
-			slack := &port.MockSlackNotifier{}
-			email := &port.MockEmailSender{}
-
-			_, err := inquiry.New(store, slack, email, 200).UpdateStatus(context.Background(), 1, string(tc.target))
-
-			assert.ErrorIs(t, err, tc.wantErr)
-			assert.Equal(t, tc.wantWrite, wrote)
-		})
-	}
-}
-
-// 仕様: UpdateStatus はエラー種別をセンチネルにマップする。
-func TestUpdateStatus_ErrorMapping(t *testing.T) {
-	cases := []struct {
-		name    string
-		target  string
-		getErr  error
-		wantErr error
-	}{
-		{
-			name:    "未知値は ErrInvalidStatusValue",
-			target:  "unknown",
-			wantErr: inquiry.ErrInvalidStatusValue,
-		},
-		{
-			name:    "get で not found → ErrNotFound",
-			target:  "in_progress",
-			getErr:  port.ErrNotFound,
-			wantErr: inquiry.ErrNotFound,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
-					if tc.getErr != nil {
-						return nil, tc.getErr
-					}
-					return newInquiry(1, domain.StatusNew), nil
-				},
-				UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
-					return newInquiry(1, domain.StatusInProgress), nil
-				},
-			}
-			slack := &port.MockSlackNotifier{}
-			email := &port.MockEmailSender{}
-
-			_, err := inquiry.New(store, slack, email, 200).UpdateStatus(context.Background(), 1, tc.target)
-
-			assert.ErrorIs(t, err, tc.wantErr)
-		})
-	}
-}
-
-// 仕様: UpdateNote は nil / 空文字を同一視してメモ削除扱いにする。
-func TestUpdateNote(t *testing.T) {
-	empty := ""
-	nonEmpty := "対応中: 追加情報待ち"
-
-	cases := []struct {
-		name     string
-		input    *string
-		wantPass *string // repo に渡る値 (nil/非nil)
-	}{
-		{
-			name:     "nil は nil として渡す",
-			input:    nil,
-			wantPass: nil,
-		},
-		{
-			name:     "空文字は nil に正規化",
-			input:    &empty,
-			wantPass: nil,
-		},
-		{
-			name:     "非空はそのまま",
-			input:    &nonEmpty,
-			wantPass: &nonEmpty,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var gotNote *string
-			store := &port.MockInquiryStore{
-				UpdateNoteFn: func(_ context.Context, _ int64, note *string) (*domain.Inquiry, error) {
-					gotNote = note
-					return newInquiry(1, domain.StatusNew), nil
-				},
-			}
-			slack := &port.MockSlackNotifier{}
-			email := &port.MockEmailSender{}
-
-			_, err := inquiry.New(store, slack, email, 200).UpdateNote(context.Background(), 1, tc.input)
-
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantPass, gotNote)
-		})
-	}
-}
-
-// 仕様 (FEATURE_SPEC §8.3): List は status クエリをパースし、指定なし (nil / 空文字のみ) は domain.Statuses (全 Status) に展開して repo に渡す。
-func TestList(t *testing.T) {
-	allLen := len(domain.Statuses)
-
-	cases := []struct {
-		name        string
-		statuses    []string
-		wantErr     error
-		wantCalled  bool
-		wantPassLen int
-	}{
-		{
-			name:        "nil slice は全 Status に展開",
-			statuses:    nil,
-			wantErr:     nil,
-			wantCalled:  true,
-			wantPassLen: allLen,
-		},
-		{
-			name:        "空文字のみも全 Status に展開",
-			statuses:    []string{""},
-			wantErr:     nil,
-			wantCalled:  true,
-			wantPassLen: allLen,
-		},
-		{
-			name:        "new 単体",
-			statuses:    []string{"new"},
-			wantErr:     nil,
-			wantCalled:  true,
-			wantPassLen: 1,
-		},
-		{
-			name:        "new + in_progress",
-			statuses:    []string{"new", "in_progress"},
-			wantErr:     nil,
-			wantCalled:  true,
-			wantPassLen: 2,
-		},
-		{
-			name:        "空文字混在は残りのみ渡す",
-			statuses:    []string{"", "new", ""},
-			wantErr:     nil,
-			wantCalled:  true,
-			wantPassLen: 1,
-		},
-		{
-			name:        "未知値は ErrInvalidStatusValue",
-			statuses:    []string{"new", "invalid"},
-			wantErr:     inquiry.ErrInvalidStatusValue,
-			wantCalled:  false,
-			wantPassLen: 0,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var called bool
-			var gotStatuses []string
-			store := &port.MockInquiryStore{
-				ListFn: func(_ context.Context, s []string) ([]domain.Inquiry, error) {
-					called = true
-					gotStatuses = s
-					return nil, nil
-				},
-			}
-			_, err := inquiry.New(store, nil, nil, 200).List(context.Background(), tc.statuses)
-
-			assert.ErrorIs(t, err, tc.wantErr)
-			assert.Equal(t, tc.wantCalled, called)
-			assert.Len(t, gotStatuses, tc.wantPassLen)
-		})
-	}
-}
-
-// 仕様: Get は port.ErrNotFound を usecase の ErrNotFound にマップ、それ以外は透過。
-func TestGet(t *testing.T) {
-	dbErr := errors.New("db lost")
-
-	cases := []struct {
-		name    string
-		getErr  error
-		wantErr error
-	}{
-		{
-			name:    "正常",
-			getErr:  nil,
-			wantErr: nil,
-		},
-		{
-			name:    "port.ErrNotFound → ErrNotFound",
-			getErr:  port.ErrNotFound,
-			wantErr: inquiry.ErrNotFound,
-		},
-		{
-			name:    "その他は透過",
-			getErr:  dbErr,
-			wantErr: dbErr,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			store := &port.MockInquiryStore{
-				GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
-					if tc.getErr != nil {
-						return nil, tc.getErr
-					}
-					return newInquiry(1, domain.StatusNew), nil
-				},
-			}
-			_, err := inquiry.New(store, nil, nil, 200).Get(context.Background(), 1)
-
-			assert.ErrorIs(t, err, tc.wantErr)
-		})
-	}
-}
-
-// 仕様: UpdateStatus / UpdateNote は書き込み時の port.ErrNotFound も usecase の ErrNotFound にマップする。
-func TestUpdateStatusOrNote_WriteNotFound(t *testing.T) {
-	cases := []struct {
-		name        string
-		run         func(uc *inquiry.Usecase) error
-		injectStore func() *port.MockInquiryStore
-	}{
-		{
-			name: "UpdateStatus: UpdateStatusFn が NotFound",
-			run: func(uc *inquiry.Usecase) error {
-				_, err := uc.UpdateStatus(context.Background(), 1, "in_progress")
-				return err
-			},
-			injectStore: func() *port.MockInquiryStore {
-				return &port.MockInquiryStore{
-					GetFn: func(_ context.Context, _ int64) (*domain.Inquiry, error) {
-						return newInquiry(1, domain.StatusNew), nil
-					},
-					UpdateStatusFn: func(_ context.Context, _ int64, _ string) (*domain.Inquiry, error) {
-						return nil, port.ErrNotFound
-					},
-				}
-			},
-		},
-		{
-			name: "UpdateNote: UpdateNoteFn が NotFound",
-			run: func(uc *inquiry.Usecase) error {
-				_, err := uc.UpdateNote(context.Background(), 1, nil)
-				return err
-			},
-			injectStore: func() *port.MockInquiryStore {
-				return &port.MockInquiryStore{
-					UpdateNoteFn: func(_ context.Context, _ int64, _ *string) (*domain.Inquiry, error) {
-						return nil, port.ErrNotFound
-					},
-				}
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			store := tc.injectStore()
-			uc := inquiry.New(store, nil, nil, 200)
-			err := tc.run(uc)
-			assert.ErrorIs(t, err, inquiry.ErrNotFound)
-		})
-	}
-}
-
-func newInquiry(id int64, status string) *domain.Inquiry {
+func newInquiry(id int64) *domain.Inquiry {
 	now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 	return &domain.Inquiry{
 		InquiryID:  id,
 		Title:      "T",
 		Body:       "B",
 		ReplyEmail: "u@e.com",
-		Status:     status,
+		Status:     "new",
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}

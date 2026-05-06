@@ -12,7 +12,7 @@ Support は **お知らせコンテンツ** と **問い合わせ履歴** の si
 |---|---|---|
 | お知らせ本体・翻訳 | support | 管理 UI からの CRUD 操作（§ 管理 UI） |
 | 問い合わせ受付 | support | 外部フォームからの POST |
-| 問い合わせステータス・対応メモ | support | Slack アクションボタン → slack-commands → 内部 API |
+| 問い合わせステータス・対応メモ | support | 管理 UI からの更新操作 (運用者ブラウザ → :9109) |
 
 他サービスとの状態同期は **行わない**（Pub/Sub publish なし）。support は他サービスを直接呼ばない。
 
@@ -22,7 +22,7 @@ support は同一バイナリ・同一 Pod で 3 つのポートを listen し�
 
 | ポート | プロトコル | 想定クライアント | 認証 | Kubernetes Service |
 |---|---|---|---|---|
-| `:9009` | HTTP JSON | gateway / slack-commands | ClusterIP 内部 | ClusterIP |
+| `:9009` | HTTP JSON | gateway | ClusterIP 内部 | ClusterIP |
 | `:9109` | HTTP HTML + HTMX | 運用者ブラウザ | IAP が `X-Goog-Authenticated-User-Email` を付与 | 外部 Ingress + IAP |
 | `:9209` | HTTP JSON | 問い合わせフォーム（ブラウザ） | なし（CORS で Origin 制限） | 外部 Ingress |
 
@@ -30,7 +30,7 @@ support は同一バイナリ・同一 Pod で 3 つのポートを listen し�
 
 - 外部公開面と内部 API を同一ポートで束ねると、「`/internal/*` を誤って Ingress に露出させた」単一の manifest ミスで内部 API が外部到達可能になる
 - IAP は Ingress / LB 単位で設定するため、`/admin/*` だけに IAP 認証を強制することはできない。`/admin/*` を公開ポートと混在させると、誤って ClusterIP 側に露出する構造的リスクが生まれる
-- ポートごとに Service / Ingress を分けることで、「管理 UI は IAP 経由のみ」「問い合わせフォームは外部 Ingress のみ」「gateway / slack-commands は ClusterIP 内のみ」という信頼境界を manifest レベルで固定できる
+- ポートごとに Service / Ingress を分けることで、「管理 UI は IAP 経由のみ」「問い合わせフォームは外部 Ingress のみ」「gateway は ClusterIP 内のみ」という信頼境界を manifest レベルで固定できる
 - CORS の適用範囲もポート単位に閉じ込められる（`:9209` のみ Origin 許可、他ポートは CORS 無効）
 
 ### CORS
@@ -98,7 +98,7 @@ HTMX は `hx-target` / `hx-swap` で DOM の一部を差し替える。新規作
 2. Slack は運営向けの早期通知。運営が問い合わせを把握できる状態にしてからユーザーに受付確認を送る
 3. SendGrid はユーザー向けの受付確認。Slack が失敗しているときに「受付完了メール」だけが届くと、ユーザーは成立と認識するが運営は気づかない — 最悪の食い違いパターンになるため、Slack 成功を先に確定させる
 
-失敗は fail-fast で即 return。Slack が失敗した時点で SendGrid を打たない（上記の食い違い防止）。呼び出し元にはエラーを返し、DB 行は残るため、[FEATURE_SPEC §8.3](FEATURE_SPEC.md) の内部 API で運営が救済する。
+失敗は fail-fast で即 return。Slack が失敗した時点で SendGrid を打たない（上記の食い違い防止）。呼び出し元にはエラーを返し、DB 行は残るため、運営は管理 UI で問い合わせ一覧から救済する（[FEATURE_SPEC §8](FEATURE_SPEC.md)）。
 
 ### トランザクション境界を跨ぐのは 1 点のみ
 
@@ -111,7 +111,7 @@ DB 書き込みは INSERT 1 件で完結する（purchaseToken のような外�
 Slack 通知・SendGrid 送信は **adapter 層のクライアント** として注入する。usecase 層は `port.SlackNotifier` / `port.EmailSender` を介して呼び、具体実装を知らない。
 
 - `ENV=local` では両 port にモック実装を注入し、外部送信を抑止する（Slack / SendGrid の dev token を開発者 PC に配布しなくて済む）
-- slack-commands との契約は「support → Slack にメッセージ投稿」「slack-commands → support の内部 API 呼び出し」の 2 方向で、相互に REST / webhook で切り離す。Slack bot token は slack-commands 側が管理し、support は投稿 API のラッパ利用のみ
+- Slack 通知は support が一方向に Slack へ POST するのみ。bot token / channel ID は support 自身が Secret Manager から取得し、外部サービスに依存しない
 - SendGrid テンプレートは外部サービス（SendGrid 管理画面）に置かず、**support バイナリ内の `html/template`** で組み立てる。プロバイダ変更時は `port.EmailSender` の adapter を付け替えるだけで済み、テンプレートの再登録・同期が不要
 
 ## お知らせ翻訳テーブル分離の意図

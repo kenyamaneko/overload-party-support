@@ -2,10 +2,6 @@
 
 package apisupport
 
-import (
-	"time"
-)
-
 // SubmitInquiryRequest は `POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。
 type SubmitInquiryRequest struct {
 	Title      string `json:"title"`
@@ -16,43 +12,5 @@ type SubmitInquiryRequest struct {
 // SubmitInquiryResponse は `POST /api/v1/inquiries` の出力。
 type SubmitInquiryResponse struct {
 	InquiryID int64 `json:"inquiry_id"`
-}
-
-// InquirySummary は `GET /internal/v1/inquiries` のレスポンス要素 (FEATURE_SPEC §8.3)。
-type InquirySummary struct {
-	InquiryID  int64     `json:"inquiry_id"`
-	Title      string    `json:"title"`
-	ReplyEmail string    `json:"reply_email"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
-
-// InquiryListResponse は `GET /internal/v1/inquiries` のトップレベル JSON。
-type InquiryListResponse struct {
-	Inquiries []InquirySummary `json:"inquiries"`
-}
-
-// InquiryDetail は `GET /internal/v1/inquiries/:id` のレスポンス。internal_note を含む。
-type InquiryDetail struct {
-	InquiryID    int64     `json:"inquiry_id"`
-	Title        string    `json:"title"`
-	Body         string    `json:"body"`
-	ReplyEmail   string    `json:"reply_email"`
-	Status       string    `json:"status"`
-	InternalNote *string   `json:"internal_note"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-// UpdateInquiryStatusRequest は `POST /internal/v1/inquiries/:id/status` の入力。
-type UpdateInquiryStatusRequest struct {
-	Status string `json:"status"`
-}
-
-// UpdateInquiryNoteRequest は `POST /internal/v1/inquiries/:id/note` の入力。
-// null / 空文字はメモ削除として扱う。
-type UpdateInquiryNoteRequest struct {
-	InternalNote *string `json:"internal_note"`
 }
 

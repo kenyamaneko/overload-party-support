@@ -10,8 +10,8 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 )
 
-// NewInternal は gateway / slack-commands 向け内部 REST API のルータを構築する。
-func NewInternal(ann *rest.AnnouncementHandler, inq *rest.InquiryHandler) *gin.Engine {
+// NewInternal は gateway 向け内部 REST API のルータを構築する。
+func NewInternal(ann *rest.AnnouncementHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(requestLogger(), gin.Recovery())
 
@@ -21,11 +21,6 @@ func NewInternal(ann *rest.AnnouncementHandler, inq *rest.InquiryHandler) *gin.E
 	{
 		v1.GET("/announcements", ann.List)
 		v1.GET("/announcements/:announcementId", ann.GetDetail)
-
-		v1.GET("/inquiries", inq.List)
-		v1.GET("/inquiries/:inquiryId", inq.GetDetail)
-		v1.POST("/inquiries/:inquiryId/status", inq.UpdateStatus)
-		v1.POST("/inquiries/:inquiryId/note", inq.UpdateNote)
 	}
 	return r
 }

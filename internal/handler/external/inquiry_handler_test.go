@@ -69,7 +69,7 @@ func TestSubmit_HTTPMapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &port.MockInquiryStore{
 				CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
-					return &domain.Inquiry{InquiryID: 1, Title: title, Body: body, ReplyEmail: replyEmail, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+					return &domain.Inquiry{InquiryID: 1, Title: title, Body: body, ReplyEmail: replyEmail, Status: "new", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 				},
 			}
 			slack := &port.MockSlackNotifier{
@@ -96,7 +96,7 @@ func TestSubmit_HTTPMapping(t *testing.T) {
 func TestSubmit_SuccessResponse(t *testing.T) {
 	store := &port.MockInquiryStore{
 		CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
-			return &domain.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: domain.StatusNew, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+			return &domain.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: "new", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 		},
 	}
 	slack := &port.MockSlackNotifier{

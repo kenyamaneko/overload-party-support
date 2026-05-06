@@ -28,8 +28,7 @@ support は **support スキーマの DB 行を唯一の真実とする**。お�
 | 経路 | ポート | 用途 | 認証 |
 |---|---|---|---|
 | gateway 経由 `GET /api/v1/announcements`, `/api/v1/announcements/:id` | `:9009` | プレイヤー・クライアント向け読み取り | 不要（gateway 側も公開ルート） |
-| 内部 `GET /internal/v1/inquiries`, `POST /internal/v1/inquiries/:id/status`, `POST /internal/v1/inquiries/:id/note` | `:9009` | ops/slack-commands 向け問い合わせ管理 | ClusterIP 内部 |
-| 管理 UI `GET /admin/*` / `POST /admin/*` | `:9109` | 運用者ブラウザによるお知らせ CRUD | IAP (Identity-Aware Proxy) |
+| 管理 UI `GET /admin/*` / `POST /admin/*` | `:9109` | 運用者ブラウザによるお知らせ CRUD / 問い合わせ管理 | IAP (Identity-Aware Proxy) |
 | 外部直通 `POST /api/v1/inquiries` | `:9209` | 問い合わせフォーム（Web）からの直アクセス | 不要（CORS で Origin 制限） |
 
 ---
@@ -282,18 +281,13 @@ support は問い合わせの対応ステータスと対応メモを内部で保
 
 メモは運営のみが読み書きでき、プレイヤーからは参照されない。個人情報が混入しうるため、DB 暗号化・アクセス制御は [DATA_DESIGN.md](DATA_DESIGN.md) / [ARCHITECTURE.md](ARCHITECTURE.md) で別途定義する。
 
-### 8.3 内部 API
+### 8.3 管理経路
 
-| API | 用途 |
-|---|---|
-| `GET /internal/v1/inquiries?status=new,in_progress` | Slack 上の未対応・対応中一覧表示 |
-| `GET /internal/v1/inquiries/:id` | Slack 上の詳細表示（対応メモを含む） |
-| `POST /internal/v1/inquiries/:id/status` | Slack からのステータス更新 |
-| `POST /internal/v1/inquiries/:id/note` | Slack からの対応メモ更新 |
+問い合わせの一覧・詳細・ステータス更新・対応メモ更新は **管理 UI (`:9109`)** から運用者が行う。`:9109` は IAP の背後にあり、運用者ブラウザのみがアクセス可能。
 
 一覧は `updated_at DESC` で並べる（`created_at` ではない）。受付直後は `created_at = updated_at` なので新着もトップに出る一方、古い問い合わせでもステータスや対応メモの更新があれば上位に浮上し、運営が直近動かした案件を見失わない。
 
-ステータス更新は `in_progress` / `closed` のみ受け付ける。`new` は受付時にサーバが一度だけセットする初期値で、API 経由では遷移先に指定できない（指定時は `ErrInvalidStatusTransition`）。**返信文面は support では管理しない**（運営が Slack の情報を元にメールで返信し、その結果を `closed` として記録するのみ）。
+ステータス更新は `in_progress` / `closed` のみ受け付ける。`new` は受付時にサーバが一度だけセットする初期値で、API 経由では遷移先に指定できない。**返信文面は support では管理しない**（運営が Slack の通知と管理 UI の詳細を元にメールで返信し、その結果を `closed` として記録するのみ）。
 
 ### 8.4 プレイヤー向け履歴 API を提供しない
 
@@ -303,7 +297,7 @@ support は問い合わせの対応ステータスと対応メモを内部で保
 
 ## 9. Slack 連携
 
-support は ops サービスが既に確立している Slack 通知基盤を共有する。Slack workspace・チャンネル ID・bot token 等の管理は ops 側（slack-commands）に従い、support は Slack クライアントのラッパーを呼ぶだけの責務とする。
+support は問い合わせ受付の **一方向通知** にのみ Slack を使う。Slack workspace・チャンネル ID・bot token は support 自身が Secret Manager から取得し、外部サービスに依存しない。
 
 ### 9.1 受付時の通知
 
@@ -313,13 +307,9 @@ support は ops サービスが既に確立している Slack 通知基盤を共
 - 件名 (`title`)
 - 本文抜粋 (`body` の先頭 200 文字、env で可変)
 - 返信先メールアドレス (`replyEmail`)
-- ステータス変更用アクションボタン（`対応開始` / `クローズ`）
+- 管理 UI へのリンク（`/admin/inquiries/:id`）
 
-アクションボタン押下は slack-commands service が受け、support の `POST /internal/v1/inquiries/:id/status` を呼ぶ。support 自身は Slack の interactive payload を解釈しない（Block Kit / action_id の命名は slack-commands 側の責務）。
-
-### 9.2 未対応・対応中一覧
-
-slack-commands の slash command（例 `/op-support list`）から `GET /internal/v1/inquiries?status=new,in_progress` を叩き、結果をメッセージとして投稿する。整形・ページング表示は slack-commands 側の責務で、support はリストを返すだけ。
+通知は read-only で、対応操作は管理 UI 側で行う。support 自身は Slack の interactive payload を解釈しない。
 
 ---
 
@@ -331,9 +321,8 @@ usecase 層は HTTP ステータスを知らない。エラーはセンチネル
 
 | 分類関数 | 対象エラー | 用途 |
 |---|---|---|
-| `IsNotFound` | `ErrAnnouncementNotFound`, `ErrInquiryNotFound` | 404 |
+| `IsNotFound` | `ErrAnnouncementNotFound` | 404 |
 | `IsValidation` | `ErrInvalidInquiry`, `ErrInvalidEmail`, `ErrLangRequired`, `ErrUnsupportedLang`, `ErrInvalidAnnouncementType`, `ErrInvalidField` | 400 |
-| `IsConflict` | `ErrInvalidStatusTransition` | 409 |
 | `IsUnauthorized` | `ErrMissingIAPHeader` | 401（管理 UI のみ） |
 
 ### 10.2 握りつぶし禁止
@@ -344,4 +333,4 @@ Slack 通知失敗・SendGrid 送信失敗・DB エラーをログのみで握�
 
 ## 11. イベント発行
 
-support は Pub/Sub イベント発行を **行わない**。他サービスとの状態同期が不要（お知らせはプル型、問い合わせは Slack 経由の運用フロー）なため。将来イベント化が必要になった場合は shop と同じ Transactional Outbox パターンを導入する。
+support は Pub/Sub イベント発行を **行わない**。他サービスとの状態同期が不要（お知らせはプル型、問い合わせは Slack 通知 + 管理 UI で運用が完結する）なため。将来イベント化が必要になった場合は shop と同じ Transactional Outbox パターンを導入する。
