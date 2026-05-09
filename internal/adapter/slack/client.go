@@ -67,7 +67,7 @@ func (n *RealNotifier) postJSON(ctx context.Context, url string, payload any) er
 	if err != nil {
 		return fmt.Errorf("send slack request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		OK    bool   `json:"ok"`

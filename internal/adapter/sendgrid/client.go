@@ -104,7 +104,7 @@ func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *domain.Inquiry
 	if err != nil {
 		return fmt.Errorf("send sendgrid request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// SendGrid は成功時 202 Accepted、失敗時は 4xx/5xx + JSON エラーボディを返す。
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
