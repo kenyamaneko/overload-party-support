@@ -28,7 +28,7 @@ func newExternalEngine(h *external.InquiryHandler) *gin.Engine {
 	return r
 }
 
-// 仕様 (FEATURE_SPEC §7.1 / API_REFERENCE): Submit はエラー種別を HTTP ステータスにマップする。
+// 仕様 (FEATURE_SPEC §7.1 / data/openapi.yaml): Submit はエラー種別を HTTP ステータスにマップする。
 func TestSubmit_HTTPMapping(t *testing.T) {
 	cases := []struct {
 		name       string

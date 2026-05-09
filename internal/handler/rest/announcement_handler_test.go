@@ -28,7 +28,7 @@ func newAnnouncementEngine(h *rest.AnnouncementHandler) *gin.Engine {
 	return r
 }
 
-// 仕様 (API_REFERENCE): GET /internal/v1/announcements は lang 必須。
+// 仕様 (data/openapi.yaml): GET /internal/v1/announcements は lang 必須。
 func TestAnnouncementList_LangValidation(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -96,7 +96,7 @@ func TestAnnouncementList_EmptyArrayResponse(t *testing.T) {
 	assert.Empty(t, resp.Announcements)
 }
 
-// 仕様 (FEATURE_SPEC §10 / API_REFERENCE): GetDetail のエラー分類を HTTP に変換する。
+// 仕様 (FEATURE_SPEC §10 / data/openapi.yaml): GetDetail のエラー分類を HTTP に変換する。
 func TestAnnouncementGetDetail(t *testing.T) {
 	dbErr := errors.New("db lost")
 
