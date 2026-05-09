@@ -2,7 +2,7 @@
 
 お知らせ配信と問い合わせ受付を行う内部マイクロサービス。内部 REST（gateway 向け）はポート 9009、運用者向け管理 UI は IAP 背後の 9109、外部問い合わせフォーム向け REST は 9209 で起動する。
 
-詳細は [機能仕様書](docs/FEATURE_SPEC.md) / [サービス設計書](docs/ARCHITECTURE.md) / [API仕様書](docs/API_REFERENCE.md) / [データ設計書](docs/DATA_DESIGN.md) を参照。
+詳細は [機能仕様書](docs/FEATURE_SPEC.md) / [サービス設計書](docs/ARCHITECTURE.md) / [API仕様書](data/openapi.yaml) / [データ設計書](docs/DATA_DESIGN.md) を参照。
 
 ## アーキテクチャ概要
 
@@ -38,8 +38,8 @@ make db-reset # volume ごと削除して再作成
 
 ## 公開パッケージ
 
-[packages/api-support/](packages/api-support/) に REST 契約型を公開している。[data/models.yaml](data/models.yaml) を編集後に以下で再生成する。
+[packages/api-support/](packages/api-support/) に REST 契約型を公開している。[data/openapi.yaml](data/openapi.yaml) を編集後に以下で再生成する。
 
 ```bash
-python3 scripts/generate_types.py
+make generate-types   # oapi-codegen をローカルにインストールしておくこと
 ```

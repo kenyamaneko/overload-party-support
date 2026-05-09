@@ -9,13 +9,14 @@ import (
 
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/presenter"
+	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
 func TestToAnnouncementSummary(t *testing.T) {
 	pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 	in := domain.AnnouncementSummary{
 		AnnouncementID: 42,
-		Type:           "info",
+		Type:           domain.TypeInfo,
 		Title:          "T",
 		PublishedAt:    pub,
 	}
@@ -23,7 +24,7 @@ func TestToAnnouncementSummary(t *testing.T) {
 	got := presenter.ToAnnouncementSummary(in)
 
 	assert.Equal(t, int64(42), got.AnnouncementID)
-	assert.Equal(t, "info", got.Type)
+	assert.Equal(t, apisupport.AnnouncementTypeInfo, got.Type)
 	assert.Equal(t, "T", got.Title)
 	assert.Equal(t, pub, got.PublishedAt)
 }
@@ -52,7 +53,7 @@ func TestToAnnouncementDetail(t *testing.T) {
 	pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 	in := &domain.AnnouncementDetail{
 		AnnouncementID: 7,
-		Type:           "maintenance",
+		Type:           domain.TypeMaintenance,
 		Title:          "T",
 		Body:           "B",
 		PublishedAt:    &pub,
@@ -61,7 +62,7 @@ func TestToAnnouncementDetail(t *testing.T) {
 	got := presenter.ToAnnouncementDetail(in)
 
 	assert.Equal(t, int64(7), got.AnnouncementID)
-	assert.Equal(t, "maintenance", got.Type)
+	assert.Equal(t, apisupport.AnnouncementTypeMaintenance, got.Type)
 	assert.Equal(t, "T", got.Title)
 	assert.Equal(t, "B", got.Body)
 	assert.Equal(t, &pub, got.PublishedAt)
@@ -70,7 +71,7 @@ func TestToAnnouncementDetail(t *testing.T) {
 func TestToAnnouncementDetail_NilPublishedAt(t *testing.T) {
 	in := &domain.AnnouncementDetail{
 		AnnouncementID: 8,
-		Type:           "info",
+		Type:           domain.TypeInfo,
 		Title:          "T",
 		Body:           "B",
 		PublishedAt:    nil,

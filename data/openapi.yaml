@@ -1,0 +1,192 @@
+openapi: 3.0.3
+info:
+  title: overload-party-support
+  version: 0.1.0
+  description: |
+    Support service の REST 契約 (gateway → support の internal API および問い合わせフォームからの公開 API)。
+    本ファイルが SSoT。`packages/api-support` の Go 型は oapi-codegen が本ファイルから生成する。
+
+    admin UI (/admin/*) は HTML/HTMX を返す内部 UI のため本契約には含めない。
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: サービス死活監視 (ClusterIP 内部のみ)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /internal/v1/announcements:
+    get:
+      operationId: listAnnouncements
+      summary: 公開中のお知らせ一覧を返す (gateway 経由でクライアントに届く)
+      parameters:
+        - $ref: "#/components/parameters/LangQuery"
+      responses:
+        "200":
+          description: お知らせ一覧
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnouncementListResponse"
+        "400":
+          description: lang 未指定 / 非対応 lang
+
+  /internal/v1/announcements/{announcementId}:
+    get:
+      operationId: getAnnouncement
+      summary: ID 指定でお知らせ詳細を返す (期間外・下書きでも返す)
+      parameters:
+        - $ref: "#/components/parameters/AnnouncementIdPath"
+        - $ref: "#/components/parameters/LangQuery"
+      responses:
+        "200":
+          description: お知らせ詳細
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnouncementDetail"
+        "400":
+          description: lang 未指定 / 非対応 lang
+        "404":
+          description: 該当お知らせ無し / 指定 lang の翻訳無し
+
+  /api/v1/inquiries:
+    post:
+      operationId: submitInquiry
+      summary: 問い合わせフォームから受信した内容を保存し Slack/Email 通知する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitInquiryRequest"
+      responses:
+        "200":
+          description: 受領成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitInquiryResponse"
+        "400":
+          description: 入力検証エラー (タイトル/本文/メールアドレス不正)
+
+components:
+  parameters:
+    AnnouncementIdPath:
+      name: announcementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+    LangQuery:
+      name: lang
+      in: query
+      required: true
+      description: |
+        取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+        (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
+      schema:
+        type: string
+
+  schemas:
+    # ─── Health ────────────────────────────────────────────────────────
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    # ─── Announcement (internal/v1) ────────────────────────────────────
+    AnnouncementListResponse:
+      type: object
+      required: [announcements]
+      properties:
+        announcements:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnouncementSummary"
+
+    AnnouncementSummary:
+      description: |
+        `GET /internal/v1/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+        expires_at / body はクライアントに露出させない。
+      type: object
+      required: [announcement_id, type, title, published_at]
+      properties:
+        announcement_id:
+          type: integer
+          format: int64
+          x-go-name: AnnouncementID
+        type:
+          $ref: "#/components/schemas/AnnouncementType"
+        title:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+
+    AnnouncementDetail:
+      description: |
+        `GET /internal/v1/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+        published_at は下書きの場合 null、expires_at はクライアントに露出させない。
+      type: object
+      required: [announcement_id, type, title, body, published_at]
+      properties:
+        announcement_id:
+          type: integer
+          format: int64
+          x-go-name: AnnouncementID
+        type:
+          $ref: "#/components/schemas/AnnouncementType"
+        title:
+          type: string
+        body:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ─── Inquiry (api/v1) ──────────────────────────────────────────────
+    SubmitInquiryRequest:
+      description: "`POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。"
+      type: object
+      required: [title, body, reply_email]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        reply_email:
+          type: string
+          description: 返信先メールアドレス (validate は usecase 層が担う)
+
+    SubmitInquiryResponse:
+      description: "`POST /api/v1/inquiries` の出力。"
+      type: object
+      required: [inquiry_id]
+      properties:
+        inquiry_id:
+          type: integer
+          format: int64
+          x-go-name: InquiryID
+
+    # ─── Enums (流出するもの) ──────────────────────────────────────────
+    AnnouncementType:
+      type: string
+      description: お知らせ種別 (FEATURE_SPEC §2)。
+      enum:
+        - info
+        - maintenance
+        - event
+        - update
