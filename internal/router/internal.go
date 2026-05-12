@@ -17,7 +17,7 @@ func NewInternal(ann *rest.AnnouncementHandler) *gin.Engine {
 
 	r.GET("/health", healthHandler)
 
-	v1 := r.Group("/internal/v1")
+	v1 := r.Group("/api/v1/support")
 	{
 		v1.GET("/announcements", ann.List)
 		v1.GET("/announcements/:announcementId", ann.GetDetail)

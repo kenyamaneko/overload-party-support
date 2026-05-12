@@ -1,0 +1,26 @@
+{
+  "name": "@kenyamaneko/overload-party-api-support",
+  "version": "0.0.0",
+  "description": "Overload Party support service の client 公開 API 型 (announcements 系)。data/openapi.yaml から openapi-typescript で生成。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.cloudsmith.io/keyandnotes/overload-party-npm/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kenyamaneko/overload-party-support.git",
+    "directory": "packages/api-support-npm"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

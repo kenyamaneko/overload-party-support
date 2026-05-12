@@ -17,10 +17,10 @@ type Server struct {
 	mu  sync.Mutex
 	srv *httptest.Server
 
-	// ListAnnouncementsFn は GET /internal/v1/announcements?lang=<code> の応答を決定する (nil は 200 + 空配列)。
+	// ListAnnouncementsFn は GET /api/v1/support/announcements?lang=<code> の応答を決定する (nil は 200 + 空配列)。
 	ListAnnouncementsFn func(lang string) (int, any)
 
-	// GetAnnouncementFn は GET /internal/v1/announcements/{announcementID}?lang=<code> の応答を決定する (nil は 404)。
+	// GetAnnouncementFn は GET /api/v1/support/announcements/{announcementID}?lang=<code> の応答を決定する (nil は 404)。
 	GetAnnouncementFn func(announcementID int64, lang string) (int, any)
 
 	// SubmitInquiryFn は POST /api/v1/inquiries の応答を決定する (nil は 200 + 空 Response)。
@@ -31,8 +31,8 @@ type Server struct {
 func NewServer() *Server {
 	s := &Server{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /internal/v1/announcements", s.handleListAnnouncements)
-	mux.HandleFunc("GET /internal/v1/announcements/{announcementID}", s.handleGetAnnouncement)
+	mux.HandleFunc("GET /api/v1/support/announcements", s.handleListAnnouncements)
+	mux.HandleFunc("GET /api/v1/support/announcements/{announcementID}", s.handleGetAnnouncement)
 	mux.HandleFunc("POST /api/v1/inquiries", s.handleSubmitInquiry)
 	s.srv = httptest.NewServer(mux)
 	return s

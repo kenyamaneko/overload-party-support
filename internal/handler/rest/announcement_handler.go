@@ -22,7 +22,7 @@ func NewAnnouncementHandler(uc *announcement.Usecase) *AnnouncementHandler {
 	return &AnnouncementHandler{uc: uc}
 }
 
-// List は `GET /internal/v1/announcements?lang=<code>` を処理する。
+// List は `GET /api/v1/support/announcements?lang=<code>` を処理する。
 func (h *AnnouncementHandler) List(c *gin.Context) {
 	lang := c.Query("lang")
 	items, err := h.uc.List(c.Request.Context(), lang)
@@ -34,7 +34,7 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, apisupport.AnnouncementListResponse{Announcements: presenter.ToAnnouncementSummaries(items)})
 }
 
-// GetDetail は `GET /internal/v1/announcements/:announcementId?lang=<code>` を処理する。
+// GetDetail は `GET /api/v1/support/announcements/:announcementId?lang=<code>` を処理する。
 func (h *AnnouncementHandler) GetDetail(c *gin.Context) {
 	lang := c.Query("lang")
 

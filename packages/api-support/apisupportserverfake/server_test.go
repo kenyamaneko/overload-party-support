@@ -26,14 +26,14 @@ func TestServer_DefaultResponses(t *testing.T) {
 		{
 			name:       "ListAnnouncements 既定は 200 + 空配列",
 			method:     http.MethodGet,
-			path:       "/internal/v1/announcements?lang=ja",
+			path:       "/api/v1/support/announcements?lang=ja",
 			reqBody:    nil,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "GetAnnouncement (Fn 未設定) 既定は 404",
 			method:     http.MethodGet,
-			path:       "/internal/v1/announcements/42?lang=ja",
+			path:       "/api/v1/support/announcements/42?lang=ja",
 			reqBody:    nil,
 			wantStatus: http.StatusNotFound,
 		},
@@ -83,7 +83,7 @@ func TestServer_ListAnnouncementsFn(t *testing.T) {
 		}
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/internal/v1/announcements?lang=ja", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/api/v1/support/announcements?lang=ja", nil)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -117,7 +117,7 @@ func TestServer_GetAnnouncementFn_ReceivesTypedID(t *testing.T) {
 		}
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/internal/v1/announcements/77?lang=en", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/api/v1/support/announcements/77?lang=en", nil)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -138,7 +138,7 @@ func TestServer_GetAnnouncement_InvalidIDReturns404(t *testing.T) {
 		return http.StatusOK, nil
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/internal/v1/announcements/notnum?lang=ja", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL()+"/api/v1/support/announcements/notnum?lang=ja", nil)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
