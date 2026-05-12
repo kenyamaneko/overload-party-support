@@ -31,7 +31,7 @@ func (e AnnouncementType) Valid() bool {
 	}
 }
 
-// AnnouncementDetail `GET /internal/v1/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+// AnnouncementDetail `GET /api/v1/support/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
 // published_at は下書きの場合 null、expires_at はクライアントに露出させない。
 type AnnouncementDetail struct {
 	AnnouncementID int64      `json:"announcement_id"`
@@ -48,7 +48,7 @@ type AnnouncementListResponse struct {
 	Announcements []AnnouncementSummary `json:"announcements"`
 }
 
-// AnnouncementSummary `GET /internal/v1/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+// AnnouncementSummary `GET /api/v1/support/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
 // expires_at / body はクライアントに露出させない。
 type AnnouncementSummary struct {
 	AnnouncementID int64     `json:"announcement_id"`

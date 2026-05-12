@@ -1,0 +1,109 @@
+name: Publish
+
+# api-support (Go module) と api-support-npm (Cloudsmith npm) を手動でタグ付け・公開する。
+# バージョンを上げるタイミングは人が判断して workflow_dispatch で実行する。
+# タグの手動打ちは禁止 — このワークフローがモジュールタグの唯一の発行元。
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Package to publish"
+        required: true
+        default: "api-support"
+        type: choice
+        options:
+          - api-support
+          - api-support-npm
+      bump:
+        description: "Version bump level"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish-api-support:
+    if: inputs.target == 'api-support'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/api-support/go.mod
+
+      - name: Vet api-support
+        run: go vet ./...
+        working-directory: packages/api-support
+
+      - name: Build api-support
+        run: go build ./...
+        working-directory: packages/api-support
+
+      - name: Determine next tag
+        id: tag
+        env:
+          PREFIX: packages/api-support/v
+          BUMP: ${{ inputs.bump }}
+        run: .github/scripts/publish/next-tag.sh
+
+      - name: Tag and push
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: .github/scripts/publish/tag-and-push.sh
+
+  publish-api-support-npm:
+    if: inputs.target == 'api-support-npm'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Determine next tag
+        id: tag
+        env:
+          PREFIX: packages/api-support-npm/v
+          BUMP: ${{ inputs.bump }}
+        run: .github/scripts/publish/next-tag.sh
+
+      - name: Build & version npm package
+        working-directory: packages/api-support-npm
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: ../../.github/scripts/publish/build-npm.sh
+
+      - name: Publish to Cloudsmith
+        uses: kenyamaneko/overload-party-common/.github/actions/publish-to-cloudsmith@main
+        with:
+          format: npm
+          package-path: packages/api-support-npm
+
+      - name: Tag and push
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: .github/scripts/publish/tag-and-push.sh

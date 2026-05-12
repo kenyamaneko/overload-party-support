@@ -3,8 +3,8 @@ info:
   title: overload-party-support
   version: 0.1.0
   description: |
-    Support service の REST 契約 (gateway → support の internal API および問い合わせフォームからの公開 API)。
-    本ファイルが SSoT。`packages/api-support` の Go 型は oapi-codegen が本ファイルから生成する。
+    Support service の REST 契約 (gateway 経由でクライアントに届く announcements、および問い合わせフォームからの公開 API)。
+    本ファイルが SSoT。`packages/api-support` (Go) と `packages/api-support-npm` (TS) の型は本ファイルから生成する。
 
     admin UI (/admin/*) は HTML/HTMX を返す内部 UI のため本契約には含めない。
 
@@ -21,7 +21,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
-  /internal/v1/announcements:
+  /api/v1/support/announcements:
     get:
       operationId: listAnnouncements
       summary: 公開中のお知らせ一覧を返す (gateway 経由でクライアントに届く)
@@ -37,7 +37,7 @@ paths:
         "400":
           description: lang 未指定 / 非対応 lang
 
-  /internal/v1/announcements/{announcementId}:
+  /api/v1/support/announcements/{announcementId}:
     get:
       operationId: getAnnouncement
       summary: ID 指定でお知らせ詳細を返す (期間外・下書きでも返す)
@@ -106,7 +106,7 @@ components:
           type: string
           example: ok
 
-    # ─── Announcement (internal/v1) ────────────────────────────────────
+    # ─── Announcement (api/v1) ─────────────────────────────────────────
     AnnouncementListResponse:
       type: object
       required: [announcements]
@@ -118,7 +118,7 @@ components:
 
     AnnouncementSummary:
       description: |
-        `GET /internal/v1/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+        `GET /api/v1/support/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
         expires_at / body はクライアントに露出させない。
       type: object
       required: [announcement_id, type, title, published_at]
@@ -137,7 +137,7 @@ components:
 
     AnnouncementDetail:
       description: |
-        `GET /internal/v1/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+        `GET /api/v1/support/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
         published_at は下書きの場合 null、expires_at はクライアントに露出させない。
       type: object
       required: [announcement_id, type, title, body, published_at]

@@ -23,12 +23,12 @@ import (
 func newAnnouncementEngine(h *rest.AnnouncementHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/internal/v1/announcements", h.List)
-	r.GET("/internal/v1/announcements/:announcementId", h.GetDetail)
+	r.GET("/api/v1/support/announcements", h.List)
+	r.GET("/api/v1/support/announcements/:announcementId", h.GetDetail)
 	return r
 }
 
-// 仕様 (data/openapi.yaml): GET /internal/v1/announcements は lang 必須。
+// 仕様 (data/openapi.yaml): GET /api/v1/support/announcements は lang 必須。
 func TestAnnouncementList_LangValidation(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -67,7 +67,7 @@ func TestAnnouncementList_LangValidation(t *testing.T) {
 			}
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
 
-			req := httptest.NewRequest(http.MethodGet, "/internal/v1/announcements"+tc.query, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements"+tc.query, nil)
 			w := httptest.NewRecorder()
 			newAnnouncementEngine(h).ServeHTTP(w, req)
 
@@ -85,7 +85,7 @@ func TestAnnouncementList_EmptyArrayResponse(t *testing.T) {
 	}
 	h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
 
-	req := httptest.NewRequest(http.MethodGet, "/internal/v1/announcements?lang=ja", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements?lang=ja", nil)
 	w := httptest.NewRecorder()
 	newAnnouncementEngine(h).ServeHTTP(w, req)
 
@@ -103,49 +103,49 @@ func TestAnnouncementGetDetail(t *testing.T) {
 	cases := []struct {
 		name       string
 		id         string
-		lang       string
+		query      string
 		repoErr    error
 		wantStatus int
 	}{
 		{
 			name:       "正常",
 			id:         "1",
-			lang:       "ja",
+			query:      "?lang=ja",
 			repoErr:    nil,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "not found",
 			id:         "1",
-			lang:       "ja",
+			query:      "?lang=ja",
 			repoErr:    port.ErrNotFound,
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name:       "非数値 ID は 404",
 			id:         "abc",
-			lang:       "ja",
+			query:      "?lang=ja",
 			repoErr:    nil,
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name:       "DB 障害は 500",
 			id:         "1",
-			lang:       "ja",
+			query:      "?lang=ja",
 			repoErr:    dbErr,
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
 			name:       "lang 欠落は 400",
 			id:         "1",
-			lang:       "",
+			query:      "",
 			repoErr:    nil,
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "lang 対応外は 400",
 			id:         "1",
-			lang:       "fr",
+			query:      "?lang=fr",
 			repoErr:    nil,
 			wantStatus: http.StatusBadRequest,
 		},
@@ -164,11 +164,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			}
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
 
-			url := "/internal/v1/announcements/" + tc.id
-			if tc.lang != "" {
-				url += "?lang=" + tc.lang
-			}
-			req := httptest.NewRequest(http.MethodGet, url, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/"+tc.id+tc.query, nil)
 			w := httptest.NewRecorder()
 			newAnnouncementEngine(h).ServeHTTP(w, req)
 
