@@ -36,7 +36,7 @@ func (h *InquiryHandler) Submit(c *gin.Context) {
 		c.JSON(submitErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, apisupport.SubmitInquiryResponse{InquiryID: id})
+	c.JSON(http.StatusOK, apisupport.SubmitInquiryResult{InquiryID: id})
 }
 
 // submitErrorStatus は Submit 特有のエラー分類。

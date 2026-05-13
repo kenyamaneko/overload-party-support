@@ -155,7 +155,7 @@ func TestServer_SubmitInquiryFn_ReceivesTypedRequest(t *testing.T) {
 	var gotReq apisupport.SubmitInquiryRequest
 	srv.SubmitInquiryFn = func(req apisupport.SubmitInquiryRequest) (int, any) {
 		gotReq = req
-		return http.StatusOK, apisupport.SubmitInquiryResponse{InquiryID: 999}
+		return http.StatusOK, apisupport.SubmitInquiryResult{InquiryID: 999}
 	}
 
 	reqBody := []byte(`{"title":"t","body":"b","reply_email":"e@example.com"}`)
@@ -170,7 +170,7 @@ func TestServer_SubmitInquiryFn_ReceivesTypedRequest(t *testing.T) {
 	assert.Equal(t, "b", gotReq.Body)
 	assert.Equal(t, "e@example.com", gotReq.ReplyEmail)
 
-	var decoded apisupport.SubmitInquiryResponse
+	var decoded apisupport.SubmitInquiryResult
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&decoded))
 	assert.Equal(t, int64(999), decoded.InquiryID)
 }

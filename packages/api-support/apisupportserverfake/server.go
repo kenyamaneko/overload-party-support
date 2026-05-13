@@ -88,7 +88,7 @@ func (s *Server) handleSubmitInquiry(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	if fn == nil {
-		writeJSON(w, http.StatusOK, apisupport.SubmitInquiryResponse{})
+		writeJSON(w, http.StatusOK, apisupport.SubmitInquiryResult{})
 		return
 	}
 	status, body := fn(req)

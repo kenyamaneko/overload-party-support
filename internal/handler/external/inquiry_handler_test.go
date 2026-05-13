@@ -114,7 +114,7 @@ func TestSubmit_SuccessResponse(t *testing.T) {
 	newExternalEngine(h).ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	var resp apisupport.SubmitInquiryResponse
+	var resp apisupport.SubmitInquiryResult
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, int64(42), resp.InquiryID)
 }

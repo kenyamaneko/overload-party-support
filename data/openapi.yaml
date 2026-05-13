@@ -72,7 +72,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubmitInquiryResponse"
+                $ref: "#/components/schemas/SubmitInquiryResult"
         "400":
           description: 入力検証エラー (タイトル/本文/メールアドレス不正)
 
@@ -171,7 +171,7 @@ components:
           type: string
           description: 返信先メールアドレス (validate は usecase 層が担う)
 
-    SubmitInquiryResponse:
+    SubmitInquiryResult:
       description: "`POST /api/v1/inquiries` の出力。"
       type: object
       required: [inquiry_id]
