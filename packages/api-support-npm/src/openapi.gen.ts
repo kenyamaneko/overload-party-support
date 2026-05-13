@@ -116,7 +116,7 @@ export interface components {
             reply_email: string;
         };
         /** @description `POST /api/v1/inquiries` の出力。 */
-        SubmitInquiryResponse: {
+        SubmitInquiryResult: {
             /** Format: int64 */
             inquiry_id: number;
         };
@@ -255,7 +255,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SubmitInquiryResponse"];
+                    "application/json": components["schemas"]["SubmitInquiryResult"];
                 };
             };
             /** @description 入力検証エラー (タイトル/本文/メールアドレス不正) */
