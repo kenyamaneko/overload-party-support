@@ -92,11 +92,8 @@ func TestClient_SubmitInquiry_StatusMapping(t *testing.T) {
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return tc.status, nil }
 
 			c := newTestClient(t, srv.URL())
-			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{
-				Title:      "t",
-				Body:       "b",
-				ReplyEmail: "e@example.com",
-			})
+			// status mapping 検証のため request body の内容は無関係 (server fake は body を見ず tc.status を返す)。
+			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
 			assertSentinel(t, err, tc.wantTarget)
 		})
 	}
