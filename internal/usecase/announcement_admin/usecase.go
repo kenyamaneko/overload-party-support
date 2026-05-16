@@ -80,22 +80,6 @@ func (u *Usecase) Get(ctx context.Context, announcementID int64) (*domain.Announ
 	return got, nil
 }
 
-// DeriveState は本体属性から state を導出する。
-// 判定順序が排他性を担保する (PublishedAt IS NULL を最初に判定するため、
-// PublishedAt=NULL ∧ ExpiresAt<=now の record は Expired ではなく Draft になる)。
-func DeriveState(a domain.Announcement, now time.Time) string {
-	if a.PublishedAt == nil {
-		return domain.StateDraft
-	}
-	if a.PublishedAt.After(now) {
-		return domain.StateScheduled
-	}
-	if a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
-		return domain.StateExpired
-	}
-	return domain.StatePublished
-}
-
 // Update は本体属性を更新する。
 func (u *Usecase) Update(ctx context.Context, announcementID int64, params domain.UpdateAnnouncementParams) error {
 	if !domain.IsSupportedType(params.Type) {

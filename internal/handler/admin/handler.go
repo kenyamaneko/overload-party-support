@@ -285,7 +285,7 @@ func toAdminListItem(aw domain.AnnouncementWithTranslations, now time.Time) (adm
 		Announcement: aw.Announcement,
 		JaTitle:      jaTitle,
 		LangsLabel:   langsLabel,
-		State:        announcementadmin.DeriveState(aw.Announcement, now),
+		State:        domain.DeriveState(aw.Announcement, now),
 	}, nil
 }
 
