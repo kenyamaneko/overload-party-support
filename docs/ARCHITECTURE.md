@@ -110,7 +110,7 @@ DB 書き込みは INSERT 1 件で完結する（purchaseToken のような外�
 
 Slack 通知・SendGrid 送信は **adapter 層のクライアント** として注入する。usecase 層は `port.SlackNotifier` / `port.EmailSender` を介して呼び、具体実装を知らない。
 
-- `ENV=local` では両 port にモック実装を注入し、外部送信を抑止する（Slack / SendGrid の dev token を開発者 PC に配布しなくて済む）
+- `ENV=local` では両 port に noop 実装を注入し、外部送信を抑止する（Slack / SendGrid の dev token を開発者 PC に配布しなくて済む）
 - Slack 通知は support が一方向に Slack へ POST するのみ。bot token / channel ID は support 自身が Secret Manager から取得し、外部サービスに依存しない
 - SendGrid テンプレートは外部サービス（SendGrid 管理画面）に置かず、**support バイナリ内の `html/template`** で組み立てる。プロバイダ変更時は `port.EmailSender` の adapter を付け替えるだけで済み、テンプレートの再登録・同期が不要
 
