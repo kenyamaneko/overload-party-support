@@ -16,11 +16,11 @@ type Sender struct{}
 func New() *Sender { return &Sender{} }
 
 // SendInquiryReceipt はログ出力のみ。
-func (s *Sender) SendInquiryReceipt(_ context.Context, inq *domain.Inquiry, snippet string) error {
+func (s *Sender) SendInquiryReceipt(_ context.Context, inquiry *domain.Inquiry, snippet string) error {
 	slog.Info("sendgrid noop: receipt email",
-		"inquiry_id", inq.InquiryID,
-		"to", inq.ReplyEmail,
-		"title", inq.Title,
+		"inquiry_id", inquiry.InquiryID,
+		"to", inquiry.ReplyEmail,
+		"title", inquiry.Title,
 		"snippet", snippet,
 	)
 	return nil

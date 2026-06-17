@@ -24,7 +24,7 @@ var ErrMissingIAPHeader = errors.New("missing IAP authenticated user header")
 func AuthMiddleware(env config.Env) gin.HandlerFunc {
 	if env == config.EnvLocal {
 		return func(c *gin.Context) {
-			c.Set(reviewerKey(), localReviewerFallback)
+			c.Set(getReviewerKey(), localReviewerFallback)
 			c.Next()
 		}
 	}
@@ -34,19 +34,19 @@ func AuthMiddleware(env config.Env) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
-		c.Set(reviewerKey(), email)
+		c.Set(getReviewerKey(), email)
 		c.Next()
 	}
 }
 
-// reviewerKey は gin.Context.Set/Get に使う文字列キー。
-func reviewerKey() string {
+// getReviewerKey は gin.Context.Set/Get に使う文字列キーを返す。
+func getReviewerKey() string {
 	return "admin.reviewer"
 }
 
 // Reviewer は IAP 由来の運用者 email を取り出す。middleware 未適用時は空文字列。
 func Reviewer(c *gin.Context) string {
-	v, ok := c.Get(reviewerKey())
+	v, ok := c.Get(getReviewerKey())
 	if !ok {
 		return ""
 	}

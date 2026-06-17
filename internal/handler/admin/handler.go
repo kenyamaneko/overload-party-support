@@ -27,24 +27,24 @@ type adminListItem struct {
 
 // Handler は管理 UI の HTTP エンドポイント群を提供する。
 type Handler struct {
-	uc  *announcementadmin.Usecase
-	tpl *templates
-	now func() time.Time
+	usecase *announcementadmin.Usecase
+	tpl     *templates
+	now     func() time.Time
 }
 
 // NewHandler は Handler を生成する。
-func NewHandler(uc *announcementadmin.Usecase, now func() time.Time) (*Handler, error) {
+func NewHandler(usecase *announcementadmin.Usecase, now func() time.Time) (*Handler, error) {
 	tpl, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{uc: uc, tpl: tpl, now: now}, nil
+	return &Handler{usecase: usecase, tpl: tpl, now: now}, nil
 }
 
 // List は `GET /admin/announcements` を処理する。
 func (h *Handler) List(c *gin.Context) {
 	filter := c.Query("status")
-	items, err := h.uc.List(c.Request.Context(), filter)
+	items, err := h.usecase.List(c.Request.Context(), filter)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -99,7 +99,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	id, err := h.uc.Create(c.Request.Context(), domain.CreateAnnouncementParams{
+	id, err := h.usecase.Create(c.Request.Context(), domain.CreateAnnouncementParams{
 		Type:         c.PostForm("type"),
 		PublishedAt:  publishedAt,
 		ExpiresAt:    expiresAt,
@@ -135,12 +135,12 @@ func (h *Handler) ShowEdit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	aw, err := h.uc.Get(c.Request.Context(), id)
+	announcementWithTranslations, err := h.usecase.Get(c.Request.Context(), id)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
-	title, err := findJaTitle(aw.Translations)
+	title, err := findJaTitle(announcementWithTranslations.Translations)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -148,8 +148,8 @@ func (h *Handler) ShowEdit(c *gin.Context) {
 	data := gin.H{
 		"Title":        title,
 		"Reviewer":     Reviewer(c),
-		"Announcement": aw.Announcement,
-		"Translations": aw.Translations,
+		"Announcement": announcementWithTranslations.Announcement,
+		"Translations": announcementWithTranslations.Translations,
 		"Types":        domain.Types,
 		"Langs":        domain.SupportedLangs,
 	}
@@ -173,7 +173,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.uc.Update(c.Request.Context(), id, domain.UpdateAnnouncementParams{
+	if err := h.usecase.Update(c.Request.Context(), id, domain.UpdateAnnouncementParams{
 		Type:        c.PostForm("type"),
 		PublishedAt: publishedAt,
 		ExpiresAt:   expiresAt,
@@ -190,7 +190,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.uc.Delete(c.Request.Context(), id); err != nil {
+	if err := h.usecase.Delete(c.Request.Context(), id); err != nil {
 		respondError(c, err)
 		return
 	}
@@ -213,7 +213,7 @@ func (h *Handler) UpsertTranslation(c *gin.Context) {
 	title := c.PostForm("title")
 	body := c.PostForm("body")
 
-	if err := h.uc.UpsertTranslation(c.Request.Context(), id, lang, title, body); err != nil {
+	if err := h.usecase.UpsertTranslation(c.Request.Context(), id, lang, title, body); err != nil {
 		respondError(c, err)
 		return
 	}
@@ -265,13 +265,13 @@ func renderPage(c *gin.Context, tpl *template.Template, data any) {
 }
 
 // toAdminListItem は AnnouncementWithTranslations から一覧表示用のビューモデルを作る。
-func toAdminListItem(aw domain.AnnouncementWithTranslations, now time.Time) (adminListItem, error) {
-	jaTitle, err := findJaTitle(aw.Translations)
+func toAdminListItem(announcementWithTranslations domain.AnnouncementWithTranslations, now time.Time) (adminListItem, error) {
+	jaTitle, err := findJaTitle(announcementWithTranslations.Translations)
 	if err != nil {
 		return adminListItem{}, err
 	}
-	langs := make([]string, 0, len(aw.Translations))
-	for _, t := range aw.Translations {
+	langs := make([]string, 0, len(announcementWithTranslations.Translations))
+	for _, t := range announcementWithTranslations.Translations {
 		langs = append(langs, t.Lang)
 	}
 	langsLabel := ""
@@ -282,10 +282,10 @@ func toAdminListItem(aw domain.AnnouncementWithTranslations, now time.Time) (adm
 		langsLabel += l
 	}
 	return adminListItem{
-		Announcement: aw.Announcement,
+		Announcement: announcementWithTranslations.Announcement,
 		JaTitle:      jaTitle,
 		LangsLabel:   langsLabel,
-		State:        domain.DeriveState(aw.Announcement, now),
+		State:        domain.DeriveState(announcementWithTranslations.Announcement, now),
 	}, nil
 }
 

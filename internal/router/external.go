@@ -11,8 +11,8 @@ import (
 // NewExternal は問い合わせフォーム (:9209) 向けの公開ルータを構築する。
 func NewExternal(allowedOrigins []string, inq *external.InquiryHandler) *gin.Engine {
 	r := gin.New()
-	r.Use(requestLogger(), gin.Recovery())
-	r.Use(corsMiddleware(allowedOrigins))
+	r.Use(newRequestLogger(), gin.Recovery())
+	r.Use(newCORSMiddleware(allowedOrigins))
 
 	r.GET("/health", healthHandler)
 
@@ -23,8 +23,8 @@ func NewExternal(allowedOrigins []string, inq *external.InquiryHandler) *gin.Eng
 	return r
 }
 
-// corsMiddleware は許可オリジンのみ Access-Control-Allow-Origin を返す。
-func corsMiddleware(allowed []string) gin.HandlerFunc {
+// newCORSMiddleware は許可オリジンのみ Access-Control-Allow-Origin を返す。
+func newCORSMiddleware(allowed []string) gin.HandlerFunc {
 	allowedSet := make(map[string]struct{}, len(allowed))
 	for _, o := range allowed {
 		allowedSet[o] = struct{}{}

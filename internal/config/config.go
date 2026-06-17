@@ -52,15 +52,15 @@ func FromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	internalPort, err := requiredInt("INTERNAL_PORT")
+	internalPort, err := getRequiredInt("INTERNAL_PORT")
 	if err != nil {
 		return nil, err
 	}
-	adminPort, err := requiredInt("ADMIN_PORT")
+	adminPort, err := getRequiredInt("ADMIN_PORT")
 	if err != nil {
 		return nil, err
 	}
-	externalPort, err := requiredInt("EXTERNAL_PORT")
+	externalPort, err := getRequiredInt("EXTERNAL_PORT")
 	if err != nil {
 		return nil, err
 	}
@@ -68,12 +68,12 @@ func FromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	databaseConn, err := requiredString("DATABASE_CONN")
+	databaseConn, err := getRequiredString("DATABASE_CONN")
 	if err != nil {
 		return nil, err
 	}
 
-	originsRaw, err := requiredString("CORS_ALLOWED_ORIGINS")
+	originsRaw, err := getRequiredString("CORS_ALLOWED_ORIGINS")
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func FromEnv() (*Config, error) {
 		return nil, fmt.Errorf("CORS_ALLOWED_ORIGINS: at least one origin required")
 	}
 
-	snippetLen, err := requiredInt("INQUIRY_BODY_SNIPPET_LENGTH")
+	snippetLen, err := getRequiredInt("INQUIRY_BODY_SNIPPET_LENGTH")
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +90,11 @@ func FromEnv() (*Config, error) {
 		return nil, fmt.Errorf("INQUIRY_BODY_SNIPPET_LENGTH: must be positive, got %d", snippetLen)
 	}
 
-	fromAddr, err := requiredString("SENDGRID_FROM_ADDRESS")
+	fromAddr, err := getRequiredString("SENDGRID_FROM_ADDRESS")
 	if err != nil {
 		return nil, err
 	}
-	fromName, err := requiredString("SENDGRID_FROM_NAME")
+	fromName, err := getRequiredString("SENDGRID_FROM_NAME")
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +154,8 @@ func validatePortsDistinct(internal, admin, external int) error {
 	return nil
 }
 
-// requiredString は必須の文字列 env を取得する。空文字列なら error。
-func requiredString(name string) (string, error) {
+// getRequiredString は必須の文字列 env を取得する。空文字列なら error。
+func getRequiredString(name string) (string, error) {
 	v := os.Getenv(name)
 	if v == "" {
 		return "", fmt.Errorf("%s is required", name)
@@ -163,8 +163,8 @@ func requiredString(name string) (string, error) {
 	return v, nil
 }
 
-// requiredInt は必須の整数 env を取得する。未設定 / 非整数ならエラー。
-func requiredInt(name string) (int, error) {
+// getRequiredInt は必須の整数 env を取得する。未設定 / 非整数ならエラー。
+func getRequiredInt(name string) (int, error) {
 	v := os.Getenv(name)
 	if v == "" {
 		return 0, fmt.Errorf("%s is required", name)

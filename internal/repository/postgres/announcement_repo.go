@@ -238,7 +238,7 @@ func (r *AnnouncementRepository) Update(ctx context.Context, announcementID int6
 // UpsertTranslation は翻訳を INSERT / UPDATE する。
 // 親記事が存在しない場合は FK 違反が先に出るため、事前に存在確認してから実行する。
 func (r *AnnouncementRepository) UpsertTranslation(ctx context.Context, announcementID int64, lang, title, body string) error {
-	if err := r.announcementExists(ctx, announcementID); err != nil {
+	if err := r.ensureAnnouncementExists(ctx, announcementID); err != nil {
 		return err
 	}
 	_, err := r.pool.Exec(ctx,
@@ -270,16 +270,16 @@ func (r *AnnouncementRepository) Delete(ctx context.Context, announcementID int6
 	return nil
 }
 
-// announcementExists は親記事の存在を確認する (FK 違反を ErrNotFound に変換)。
-func (r *AnnouncementRepository) announcementExists(ctx context.Context, announcementID int64) error {
-	var exists bool
+// ensureAnnouncementExists は親記事の存在を確認する (FK 違反を ErrNotFound に変換)。
+func (r *AnnouncementRepository) ensureAnnouncementExists(ctx context.Context, announcementID int64) error {
+	var isFound bool
 	if err := r.pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM support.announcements WHERE announcement_id = $1)`,
 		announcementID,
-	).Scan(&exists); err != nil {
+	).Scan(&isFound); err != nil {
 		return fmt.Errorf("check announcement exists: %w", err)
 	}
-	if !exists {
+	if !isFound {
 		return fmt.Errorf("announcement %d: %w", announcementID, port.ErrNotFound)
 	}
 	return nil

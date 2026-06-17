@@ -36,7 +36,7 @@ func (u *Usecase) Create(ctx context.Context, params domain.CreateAnnouncementPa
 		if err := validateTranslationFields(t.Lang, t.Title, t.Body); err != nil {
 			return 0, err
 		}
-		if _, dup := seenLangs[t.Lang]; dup {
+		if _, ok := seenLangs[t.Lang]; ok {
 			return 0, ErrInvalidField
 		}
 		seenLangs[t.Lang] = struct{}{}

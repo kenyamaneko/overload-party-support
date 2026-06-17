@@ -34,15 +34,15 @@ func NewRealNotifier(botToken, channelID string) *RealNotifier {
 }
 
 // NotifyInquiryReceived は問い合わせ受付通知を運営チャンネルに投稿する。
-func (n *RealNotifier) NotifyInquiryReceived(ctx context.Context, inq *domain.Inquiry, snippet string) error {
+func (n *RealNotifier) NotifyInquiryReceived(ctx context.Context, inquiry *domain.Inquiry, snippet string) error {
 	body := map[string]any{
 		"channel": n.channelID,
-		"text":    fmt.Sprintf("新しい問い合わせ #%d", inq.InquiryID),
+		"text":    fmt.Sprintf("新しい問い合わせ #%d", inquiry.InquiryID),
 		"blocks": []map[string]any{
-			{"type": "header", "text": map[string]any{"type": "plain_text", "text": fmt.Sprintf("問い合わせ #%d", inq.InquiryID)}},
+			{"type": "header", "text": map[string]any{"type": "plain_text", "text": fmt.Sprintf("問い合わせ #%d", inquiry.InquiryID)}},
 			{"type": "section", "fields": []map[string]any{
-				{"type": "mrkdwn", "text": fmt.Sprintf("*件名*\n%s", inq.Title)},
-				{"type": "mrkdwn", "text": fmt.Sprintf("*返信先*\n%s", inq.ReplyEmail)},
+				{"type": "mrkdwn", "text": fmt.Sprintf("*件名*\n%s", inquiry.Title)},
+				{"type": "mrkdwn", "text": fmt.Sprintf("*返信先*\n%s", inquiry.ReplyEmail)},
 			}},
 			{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": fmt.Sprintf("*本文抜粋*\n%s", snippet)}},
 		},

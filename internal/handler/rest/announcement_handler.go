@@ -14,18 +14,18 @@ import (
 
 // AnnouncementHandler は gateway が呼び出すお知らせ読み取り API。
 type AnnouncementHandler struct {
-	uc *announcement.Usecase
+	usecase *announcement.Usecase
 }
 
 // NewAnnouncementHandler は AnnouncementHandler を生成する。
-func NewAnnouncementHandler(uc *announcement.Usecase) *AnnouncementHandler {
-	return &AnnouncementHandler{uc: uc}
+func NewAnnouncementHandler(usecase *announcement.Usecase) *AnnouncementHandler {
+	return &AnnouncementHandler{usecase: usecase}
 }
 
 // List は `GET /api/v1/support/announcements?lang=<code>` を処理する。
 func (h *AnnouncementHandler) List(c *gin.Context) {
 	lang := c.Query("lang")
-	items, err := h.uc.List(c.Request.Context(), lang)
+	items, err := h.usecase.List(c.Request.Context(), lang)
 	if err != nil {
 		slog.Warn("announcement list failed", "lang", lang, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})
@@ -45,7 +45,7 @@ func (h *AnnouncementHandler) GetDetail(c *gin.Context) {
 		return
 	}
 
-	detail, err := h.uc.GetDetail(c.Request.Context(), id, lang)
+	detail, err := h.usecase.GetDetail(c.Request.Context(), id, lang)
 	if err != nil {
 		slog.Warn("announcement get detail failed", "announcement_id", id, "lang", lang, "error", err)
 		c.JSON(errorStatus(err), gin.H{"error": err.Error()})

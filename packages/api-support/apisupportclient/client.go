@@ -83,7 +83,7 @@ func (c *Client) GetHealth(ctx context.Context) (*apisupport.HealthResponse, err
 	if resp.JSON200 != nil {
 		return resp.JSON200, nil
 	}
-	return nil, statusError("GetHealth", resp.StatusCode())
+	return nil, newStatusError("GetHealth", resp.StatusCode())
 }
 
 // ListAnnouncements は公開中のお知らせ一覧を返す。lang は表示言語コード。
@@ -95,7 +95,7 @@ func (c *Client) ListAnnouncements(ctx context.Context, lang string) (*apisuppor
 	if resp.JSON200 != nil {
 		return resp.JSON200, nil
 	}
-	return nil, statusError("ListAnnouncements", resp.StatusCode())
+	return nil, newStatusError("ListAnnouncements", resp.StatusCode())
 }
 
 // GetAnnouncement は ID 指定でお知らせ詳細を返す。
@@ -107,7 +107,7 @@ func (c *Client) GetAnnouncement(ctx context.Context, announcementID int64, lang
 	if resp.JSON200 != nil {
 		return resp.JSON200, nil
 	}
-	return nil, statusError("GetAnnouncement", resp.StatusCode())
+	return nil, newStatusError("GetAnnouncement", resp.StatusCode())
 }
 
 // SubmitInquiry は問い合わせフォームから受信した内容を送信する。
@@ -119,11 +119,11 @@ func (c *Client) SubmitInquiry(ctx context.Context, req apisupport.SubmitInquiry
 	if resp.JSON200 != nil {
 		return resp.JSON200, nil
 	}
-	return nil, statusError("SubmitInquiry", resp.StatusCode())
+	return nil, newStatusError("SubmitInquiry", resp.StatusCode())
 }
 
-// statusError は HTTP status code を sentinel error (errors.Is 分岐可能) に変換する。
-func statusError(op string, code int) error {
+// newStatusError は HTTP status code から sentinel error (errors.Is 分岐可能) を生成する。
+func newStatusError(op string, code int) error {
 	var sentinel error
 	switch {
 	case code == http.StatusUnauthorized:
