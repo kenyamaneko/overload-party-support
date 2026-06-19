@@ -1,6 +1,6 @@
 module github.com/kenyamaneko/overload-party-support
 
-go 1.25.10
+go 1.25.11
 
 require (
 	github.com/gin-gonic/gin v1.11.0
