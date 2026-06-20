@@ -64,13 +64,13 @@ func run() error {
 		return fmt.Errorf("build email sender: %w", err)
 	}
 
-	announcementUC := announcement.New(announcementRepo, time.Now)
-	announcementAdminUC := announcementadmin.New(announcementRepo, time.Now)
-	inquiryUC := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
+	announcementUsecase := announcement.New(announcementRepo, time.Now)
+	announcementAdminUsecase := announcementadmin.New(announcementRepo, time.Now)
+	inquiryUsecase := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
 
-	announcementH := rest.NewAnnouncementHandler(announcementUC)
-	externalH := external.NewInquiryHandler(inquiryUC)
-	adminH, err := admin.NewHandler(announcementAdminUC, time.Now)
+	announcementH := rest.NewAnnouncementHandler(announcementUsecase)
+	externalH := external.NewInquiryHandler(inquiryUsecase)
+	adminH, err := admin.NewHandler(announcementAdminUsecase, time.Now)
 	if err != nil {
 		return fmt.Errorf("build admin handler: %w", err)
 	}

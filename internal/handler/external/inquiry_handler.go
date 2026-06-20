@@ -14,12 +14,12 @@ import (
 
 // InquiryHandler は問い合わせフォームから直接呼ばれる受付 API。
 type InquiryHandler struct {
-	uc *inquiry.Usecase
+	usecase *inquiry.Usecase
 }
 
 // NewInquiryHandler は InquiryHandler を生成する。
-func NewInquiryHandler(uc *inquiry.Usecase) *InquiryHandler {
-	return &InquiryHandler{uc: uc}
+func NewInquiryHandler(usecase *inquiry.Usecase) *InquiryHandler {
+	return &InquiryHandler{usecase: usecase}
 }
 
 // Submit は `POST /api/v1/inquiries` を処理する。
@@ -30,7 +30,7 @@ func (h *InquiryHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	id, err := h.uc.Submit(c.Request.Context(), req.Title, req.Body, req.ReplyEmail)
+	id, err := h.usecase.Submit(c.Request.Context(), req.Title, req.Body, req.ReplyEmail)
 	if err != nil {
 		slog.Warn("inquiry submit failed", "error", err)
 		c.JSON(submitErrorStatus(err), gin.H{"error": err.Error()})

@@ -68,19 +68,19 @@ func NewRealSender(apiKey, fromAddress, fromName string) (*RealSender, error) {
 }
 
 // SendInquiryReceipt は受付確認メールを SendGrid 経由で送信する。
-func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *domain.Inquiry, snippet string) error {
-	bodyText, err := s.renderBody(inq, snippet)
+func (s *RealSender) SendInquiryReceipt(ctx context.Context, inquiry *domain.Inquiry, snippet string) error {
+	bodyText, err := s.renderBody(inquiry, snippet)
 	if err != nil {
 		return err
 	}
-	subject, err := s.renderSubject(inq)
+	subject, err := s.renderSubject(inquiry)
 	if err != nil {
 		return err
 	}
 
 	payload := map[string]any{
 		"personalizations": []map[string]any{
-			{"to": []map[string]string{{"email": inq.ReplyEmail}}},
+			{"to": []map[string]string{{"email": inquiry.ReplyEmail}}},
 		},
 		"from":    map[string]string{"email": s.fromAddress, "name": s.fromName},
 		"subject": subject,
@@ -114,30 +114,30 @@ func (s *RealSender) SendInquiryReceipt(ctx context.Context, inq *domain.Inquiry
 }
 
 // renderBody は本文テンプレートを評価する。
-func (s *RealSender) renderBody(inq *domain.Inquiry, snippet string) (string, error) {
+func (s *RealSender) renderBody(inquiry *domain.Inquiry, snippet string) (string, error) {
 	var buf bytes.Buffer
-	if err := s.bodyTmpl.Execute(&buf, templateData(inq, snippet)); err != nil {
+	if err := s.bodyTmpl.Execute(&buf, buildTemplateData(inquiry, snippet)); err != nil {
 		return "", fmt.Errorf("render receipt body: %w", err)
 	}
 	return buf.String(), nil
 }
 
 // renderSubject は件名テンプレートを評価する。
-func (s *RealSender) renderSubject(inq *domain.Inquiry) (string, error) {
+func (s *RealSender) renderSubject(inquiry *domain.Inquiry) (string, error) {
 	var buf bytes.Buffer
-	if err := s.subjectTmpl.Execute(&buf, templateData(inq, "")); err != nil {
+	if err := s.subjectTmpl.Execute(&buf, buildTemplateData(inquiry, "")); err != nil {
 		return "", fmt.Errorf("render receipt subject: %w", err)
 	}
 	return buf.String(), nil
 }
 
-// templateData はテンプレート評価用のビューモデル。
-func templateData(inq *domain.Inquiry, snippet string) map[string]any {
+// buildTemplateData はテンプレート評価用のビューモデルを組み立てる。
+func buildTemplateData(inquiry *domain.Inquiry, snippet string) map[string]any {
 	return map[string]any{
-		"InquiryID":   inq.InquiryID,
-		"Title":       inq.Title,
-		"ReplyEmail":  inq.ReplyEmail,
-		"CreatedAt":   inq.CreatedAt,
+		"InquiryID":   inquiry.InquiryID,
+		"Title":       inquiry.Title,
+		"ReplyEmail":  inquiry.ReplyEmail,
+		"CreatedAt":   inquiry.CreatedAt,
 		"BodySnippet": snippet,
 	}
 }

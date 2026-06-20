@@ -38,22 +38,22 @@ func (u *Usecase) Submit(ctx context.Context, title, body, replyEmail string) (i
 		return 0, err
 	}
 
-	inq, err := u.store.Create(ctx, title, body, replyEmail)
+	inquiry, err := u.store.Create(ctx, title, body, replyEmail)
 	if err != nil {
 		return 0, fmt.Errorf("inquiry create: %w", err)
 	}
 
-	bodySnippet := snippet(inq.Body, u.snippetLength)
+	bodySnippet := truncate(inquiry.Body, u.snippetLength)
 
-	if err := u.slack.NotifyInquiryReceived(ctx, inq, bodySnippet); err != nil {
+	if err := u.slack.NotifyInquiryReceived(ctx, inquiry, bodySnippet); err != nil {
 		return 0, fmt.Errorf("slack notify: %w", err)
 	}
 
-	if err := u.email.SendInquiryReceipt(ctx, inq, bodySnippet); err != nil {
+	if err := u.email.SendInquiryReceipt(ctx, inquiry, bodySnippet); err != nil {
 		return 0, fmt.Errorf("send receipt: %w", err)
 	}
 
-	return inq.InquiryID, nil
+	return inquiry.InquiryID, nil
 }
 
 // validateSubmit は受付時のバリデーション。
@@ -73,8 +73,8 @@ func validateSubmit(title, body, replyEmail string) error {
 	return nil
 }
 
-// snippet は文字列を rune 単位で先頭 n 文字に切り詰める。
-func snippet(s string, n int) string {
+// truncate は文字列を rune 単位で先頭 n 文字に切り詰める。
+func truncate(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {
 		return s

@@ -13,7 +13,7 @@ import (
 // NewInternal は gateway 向け内部 REST API のルータを構築する。
 func NewInternal(ann *rest.AnnouncementHandler) *gin.Engine {
 	r := gin.New()
-	r.Use(requestLogger(), gin.Recovery())
+	r.Use(newRequestLogger(), gin.Recovery())
 
 	r.GET("/health", healthHandler)
 
@@ -29,8 +29,8 @@ func healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// requestLogger は構造化ログを出力する共通ミドルウェア。
-func requestLogger() gin.HandlerFunc {
+// newRequestLogger は構造化ログを出力する共通ミドルウェア。
+func newRequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path

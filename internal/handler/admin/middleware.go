@@ -39,7 +39,7 @@ func AuthMiddleware(env config.Env) gin.HandlerFunc {
 	}
 }
 
-// reviewerKey は gin.Context.Set/Get に使う文字列キー。
+// reviewerKey は gin.Context.Set/Get に使う文字列キーを返す。
 func reviewerKey() string {
 	return "admin.reviewer"
 }

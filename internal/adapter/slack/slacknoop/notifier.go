@@ -16,11 +16,11 @@ type Notifier struct{}
 func New() *Notifier { return &Notifier{} }
 
 // NotifyInquiryReceived はログ出力のみ。
-func (n *Notifier) NotifyInquiryReceived(_ context.Context, inq *domain.Inquiry, snippet string) error {
+func (n *Notifier) NotifyInquiryReceived(_ context.Context, inquiry *domain.Inquiry, snippet string) error {
 	slog.Info("slack noop: inquiry received",
-		"inquiry_id", inq.InquiryID,
-		"title", inq.Title,
-		"reply_email", inq.ReplyEmail,
+		"inquiry_id", inquiry.InquiryID,
+		"title", inquiry.Title,
+		"reply_email", inquiry.ReplyEmail,
 		"snippet", snippet,
 	)
 	return nil

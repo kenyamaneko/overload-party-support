@@ -10,7 +10,7 @@ import (
 // NewAdmin は管理 UI (:9109) のルータを構築する。
 func NewAdmin(env config.Env, adminH *admin.Handler) *gin.Engine {
 	r := gin.New()
-	r.Use(requestLogger(), gin.Recovery())
+	r.Use(newRequestLogger(), gin.Recovery())
 
 	r.GET("/health", healthHandler)
 

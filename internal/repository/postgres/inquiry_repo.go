@@ -35,14 +35,14 @@ func (r *InquiryRepository) Create(ctx context.Context, title, body, replyEmail 
 
 // scanInquiry は Inquiry 全カラム分の Scan を共通化する。
 func scanInquiry(row pgx.Row) (*domain.Inquiry, error) {
-	var inq domain.Inquiry
+	var inquiry domain.Inquiry
 	var statusStr string
 	if err := row.Scan(
-		&inq.InquiryID, &inq.Title, &inq.Body, &inq.ReplyEmail,
-		&statusStr, &inq.InternalNote, &inq.CreatedAt, &inq.UpdatedAt,
+		&inquiry.InquiryID, &inquiry.Title, &inquiry.Body, &inquiry.ReplyEmail,
+		&statusStr, &inquiry.InternalNote, &inquiry.CreatedAt, &inquiry.UpdatedAt,
 	); err != nil {
 		return nil, err
 	}
-	inq.Status = statusStr
-	return &inq, nil
+	inquiry.Status = statusStr
+	return &inquiry, nil
 }
