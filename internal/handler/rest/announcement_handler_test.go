@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
+	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
@@ -94,6 +94,72 @@ func TestAnnouncementList_EmptyArrayResponse(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.NotNil(t, resp.Announcements)
 	assert.Empty(t, resp.Announcements)
+}
+
+func TestAnnouncementList_ResponseFields(t *testing.T) {
+	pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	repo := &port.MockAnnouncementRepo{
+		ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
+			return []domain.AnnouncementSummary{
+				{AnnouncementID: 1, Type: domain.TypeInfo, Title: "一件目", PublishedAt: pub},
+				{AnnouncementID: 2, Type: domain.TypeMaintenance, Title: "二件目", PublishedAt: pub},
+			}, nil
+		},
+	}
+	h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements?lang=ja", nil)
+	w := httptest.NewRecorder()
+	newAnnouncementEngine(h).ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp apisupport.AnnouncementListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	want := []apisupport.AnnouncementSummary{
+		{AnnouncementID: 1, Type: apisupport.AnnouncementTypeInfo, Title: "一件目", PublishedAt: pub},
+		{AnnouncementID: 2, Type: apisupport.AnnouncementTypeMaintenance, Title: "二件目", PublishedAt: pub},
+	}
+	assert.Equal(t, want, resp.Announcements)
+}
+
+func TestAnnouncementGetDetail_ResponseFields(t *testing.T) {
+	pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		detail *domain.AnnouncementDetail
+		want   apisupport.AnnouncementDetail
+	}{
+		{
+			name:   "published_at ありは全フィールドを wire へ透過",
+			detail: &domain.AnnouncementDetail{AnnouncementID: 7, Type: domain.TypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
+			want:   apisupport.AnnouncementDetail{AnnouncementID: 7, Type: apisupport.AnnouncementTypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
+		},
+		{
+			name:   "published_at なしは null で透過",
+			detail: &domain.AnnouncementDetail{AnnouncementID: 8, Type: domain.TypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
+			want:   apisupport.AnnouncementDetail{AnnouncementID: 8, Type: apisupport.AnnouncementTypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
+					return tc.detail, nil
+				},
+			}
+			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/1?lang=ja", nil)
+			w := httptest.NewRecorder()
+			newAnnouncementEngine(h).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var resp apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.Equal(t, tc.want, resp)
+		})
+	}
 }
 
 // 仕様 (FEATURE_SPEC §10 / data/openapi.yaml): GetDetail のエラー分類を HTTP に変換する。
