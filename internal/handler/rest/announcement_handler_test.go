@@ -165,11 +165,13 @@ func TestAnnouncementGetDetail_ResponseFields(t *testing.T) {
 // 仕様 (FEATURE_SPEC §10 / data/openapi.yaml): GetDetail のエラー分類を HTTP に変換する。
 func TestAnnouncementGetDetail(t *testing.T) {
 	dbErr := errors.New("db lost")
+	okDetail := &domain.AnnouncementDetail{AnnouncementID: 1, Type: domain.TypeInfo}
 
 	cases := []struct {
 		name       string
 		id         string
 		query      string
+		detail     *domain.AnnouncementDetail
 		repoErr    error
 		wantStatus int
 	}{
@@ -177,7 +179,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			name:       "正常",
 			id:         "1",
 			query:      "?lang=ja",
-			repoErr:    nil,
+			detail:     okDetail,
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -191,7 +193,6 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			name:       "非数値 ID は 404",
 			id:         "abc",
 			query:      "?lang=ja",
-			repoErr:    nil,
 			wantStatus: http.StatusNotFound,
 		},
 		{
@@ -205,14 +206,12 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			name:       "lang 欠落は 400",
 			id:         "1",
 			query:      "",
-			repoErr:    nil,
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "lang 対応外は 400",
 			id:         "1",
 			query:      "?lang=fr",
-			repoErr:    nil,
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -222,10 +221,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
-					if tc.repoErr != nil {
-						return nil, tc.repoErr
-					}
-					return &domain.AnnouncementDetail{AnnouncementID: 1, Type: domain.TypeInfo}, nil
+					return tc.detail, tc.repoErr
 				},
 			}
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))

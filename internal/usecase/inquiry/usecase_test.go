@@ -132,6 +132,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 
 	cases := []struct {
 		name           string
+		createResult   *domain.Inquiry
 		createErr      error
 		slackErr       error
 		sendErr        error
@@ -150,6 +151,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 		},
 		{
 			name:           "Slack 失敗 → email 呼ばない",
+			createResult:   newInquiry(1),
 			slackErr:       slackErr,
 			wantCreateCall: true,
 			wantSlackCall:  true,
@@ -158,6 +160,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 		},
 		{
 			name:           "SendGrid 失敗 → エラーを透過",
+			createResult:   newInquiry(1),
 			sendErr:        sendErr,
 			wantCreateCall: true,
 			wantSlackCall:  true,
@@ -166,6 +169,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 		},
 		{
 			name:           "全部成功",
+			createResult:   newInquiry(1),
 			wantCreateCall: true,
 			wantSlackCall:  true,
 			wantEmailCall:  true,
@@ -180,10 +184,7 @@ func TestSubmit_FailFastSideEffects(t *testing.T) {
 			store := &port.MockInquiryStore{
 				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
 					createCalled = true
-					if tc.createErr != nil {
-						return nil, tc.createErr
-					}
-					return newInquiry(1), nil
+					return tc.createResult, tc.createErr
 				},
 			}
 			slack := &port.MockSlackNotifier{
