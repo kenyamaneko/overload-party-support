@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -85,45 +86,33 @@ func TestParseDatetimeLocal(t *testing.T) {
 	}
 }
 
-func TestCreateRoute(t *testing.T) {
+// URL パス・モック値・期待値の間で一致が必要な announcement ID 群。片側だけの書き換えを防ぐため定数で束ねる。
+const (
+	createdAnnouncementID int64 = 10
+	targetAnnouncementID  int64 = 7
+	deletedAnnouncementID int64 = 42
+)
+
+func TestCreateRoute_CreatesTranslationsAndRedirects(t *testing.T) {
 	cases := []struct {
 		name             string
 		form             url.Values
-		createID         int64 // usecase.Create が採番する想定 ID。成功ケースのリダイレクト先に現れる
-		wantStatus       int
-		wantLocation     string
 		wantTranslations []domain.TranslationInput
 	}{
 		{
-			name:         "en 両空は ja 翻訳のみで作成しリダイレクト",
-			form:         url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}},
-			createID:     10,
-			wantStatus:   http.StatusSeeOther,
-			wantLocation: "/admin/announcements/10",
+			name: "en 両空は ja 翻訳のみで作成",
+			form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}},
 			wantTranslations: []domain.TranslationInput{
 				{Lang: domain.LangJa, Title: "題", Body: "本文"},
 			},
 		},
 		{
-			name:         "en 両在は ja + en 翻訳で作成しリダイレクト",
-			form:         url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_title": {"T"}, "en_body": {"B"}},
-			createID:     10,
-			wantStatus:   http.StatusSeeOther,
-			wantLocation: "/admin/announcements/10",
+			name: "en 両在は ja + en 翻訳で作成",
+			form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_title": {"T"}, "en_body": {"B"}},
 			wantTranslations: []domain.TranslationInput{
 				{Lang: domain.LangJa, Title: "題", Body: "本文"},
 				{Lang: domain.LangEn, Title: "T", Body: "B"},
 			},
-		},
-		{
-			name:       "en title のみは 400 で usecase に到達しない",
-			form:       url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_title": {"T"}},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name:       "en body のみは 400 で usecase に到達しない",
-			form:       url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_body": {"B"}},
-			wantStatus: http.StatusBadRequest,
 		},
 	}
 
@@ -133,7 +122,7 @@ func TestCreateRoute(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				CreateFn: func(_ context.Context, params domain.CreateAnnouncementParams) (int64, error) {
 					gotParams = params
-					return tc.createID, nil
+					return createdAnnouncementID, nil
 				},
 			}
 
@@ -142,59 +131,73 @@ func TestCreateRoute(t *testing.T) {
 			w := httptest.NewRecorder()
 			newAdminEngine(t, repo).ServeHTTP(w, req)
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Equal(t, tc.wantLocation, w.Header().Get("Location"))
+			assert.Equal(t, http.StatusSeeOther, w.Code)
+			assert.Equal(t, fmt.Sprintf("/admin/announcements/%d", createdAnnouncementID), w.Header().Get("Location"))
 			assert.Equal(t, tc.wantTranslations, gotParams.Translations)
 		})
 	}
 }
 
-func TestDeleteRoute(t *testing.T) {
+func TestCreateRoute_RejectsHalfEnTranslation(t *testing.T) {
 	cases := []struct {
-		name          string
-		idParam       string
-		wantStatus    int
-		wantLocation  string
-		wantDeletedID int64
+		name string
+		form url.Values
 	}{
 		{
-			name:          "数値 ID は usecase に渡され一覧へリダイレクト",
-			idParam:       "42",
-			wantStatus:    http.StatusSeeOther,
-			wantLocation:  "/admin/announcements",
-			wantDeletedID: 42,
+			name: "en title のみは 400",
+			form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_title": {"T"}},
 		},
 		{
-			name:          "非数値 ID は 404 で usecase に到達しない",
-			idParam:       "abc",
-			wantStatus:    http.StatusNotFound,
-			wantLocation:  "",
-			wantDeletedID: 0,
+			name: "en body のみは 400",
+			form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_body": {"B"}},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var gotDeletedID int64
-			repo := &port.MockAnnouncementRepo{
-				DeleteFn: func(_ context.Context, announcementID int64) error {
-					gotDeletedID = announcementID
-					return nil
-				},
-			}
+			// CreateFn を未設定にすることで、呼ばれた瞬間に panic して「usecase に到達しない」ことを担保する (MockAnnouncementRepo 契約)
+			repo := &port.MockAnnouncementRepo{}
 
-			req := httptest.NewRequest(http.MethodPost, "/admin/announcements/"+tc.idParam+"/delete", nil)
+			req := httptest.NewRequest(http.MethodPost, "/admin/announcements", strings.NewReader(tc.form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 			newAdminEngine(t, repo).ServeHTTP(w, req)
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Equal(t, tc.wantLocation, w.Header().Get("Location"))
-			assert.Equal(t, tc.wantDeletedID, gotDeletedID)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
 		})
 	}
 }
 
-func TestListRoute(t *testing.T) {
+func TestDeleteRoute_DeletesAndRedirectsToList(t *testing.T) {
+	var gotDeletedID int64
+	repo := &port.MockAnnouncementRepo{
+		DeleteFn: func(_ context.Context, announcementID int64) error {
+			gotDeletedID = announcementID
+			return nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d/delete", deletedAnnouncementID), nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/announcements", w.Header().Get("Location"))
+	assert.Equal(t, deletedAnnouncementID, gotDeletedID)
+}
+
+func TestDeleteRoute_ReturnsNotFoundForNonNumericID(t *testing.T) {
+	// DeleteFn を未設定にすることで、呼ばれた瞬間に panic して「usecase に到達しない」ことを担保する (MockAnnouncementRepo 契約)
+	repo := &port.MockAnnouncementRepo{}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/announcements/abc/delete", nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestListRoute_RendersSeededTitle(t *testing.T) {
 	published := fixedAdminNow.Add(-time.Hour)
 	seeded := domain.AnnouncementWithTranslations{
 		Announcement: domain.Announcement{AnnouncementID: 5, Type: domain.TypeInfo, PublishedAt: &published},
@@ -203,192 +206,152 @@ func TestListRoute(t *testing.T) {
 			{Lang: domain.LangEn, Title: "listed", Body: "b"},
 		},
 	}
-
-	cases := []struct {
-		name             string
-		query            string
-		wantStatus       int
-		wantBodyContains string
-	}{
-		{
-			name:             "既定の一覧は seed したお知らせのタイトルを描画",
-			query:            "",
-			wantStatus:       http.StatusOK,
-			wantBodyContains: "一覧に出る題",
-		},
-		{
-			name:             "未対応の status 絞り込みは 400",
-			query:            "?status=bogus",
-			wantStatus:       http.StatusBadRequest,
-			wantBodyContains: announcementadmin.ErrInvalidStatusFilter.Error(),
+	repo := &port.MockAnnouncementRepo{
+		ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+			return []domain.AnnouncementWithTranslations{seeded}, nil
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &port.MockAnnouncementRepo{
-				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
-					return []domain.AnnouncementWithTranslations{seeded}, nil
-				},
-			}
+	req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
 
-			req := httptest.NewRequest(http.MethodGet, "/admin/announcements"+tc.query, nil)
-			w := httptest.NewRecorder()
-			newAdminEngine(t, repo).ServeHTTP(w, req)
-
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Contains(t, w.Body.String(), tc.wantBodyContains)
-		})
-	}
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "一覧に出る題")
 }
 
-func TestShowEditRoute(t *testing.T) {
+func TestListRoute_RejectsUnknownStatusFilter(t *testing.T) {
+	// ListFn を未設定にすることで、呼ばれた瞬間に panic して「repo に到達しない」ことを担保する (MockAnnouncementRepo 契約)
+	repo := &port.MockAnnouncementRepo{}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/announcements?status=bogus", nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), announcementadmin.ErrInvalidStatusFilter.Error())
+}
+
+func TestShowEditRoute_RendersJaTitle(t *testing.T) {
 	existing := &domain.AnnouncementWithTranslations{
-		Announcement: domain.Announcement{AnnouncementID: 7, Type: domain.TypeInfo},
+		Announcement: domain.Announcement{AnnouncementID: targetAnnouncementID, Type: domain.TypeInfo},
 		Translations: []domain.Translation{{Lang: domain.LangJa, Title: "編集対象の題", Body: "本文"}},
 	}
-
-	cases := []struct {
-		name             string
-		getResult        *domain.AnnouncementWithTranslations
-		getErr           error
-		wantStatus       int
-		wantBodyContains string
-	}{
-		{
-			name:             "既存 ID は ja タイトルを描画",
-			getResult:        existing,
-			wantStatus:       http.StatusOK,
-			wantBodyContains: "編集対象の題",
-		},
-		{
-			name:             "未存在 ID は 404",
-			getErr:           port.ErrNotFound,
-			wantStatus:       http.StatusNotFound,
-			wantBodyContains: announcementadmin.ErrNotFound.Error(),
+	repo := &port.MockAnnouncementRepo{
+		GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+			return existing, nil
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &port.MockAnnouncementRepo{
-				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
-					return tc.getResult, tc.getErr
-				},
-			}
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
 
-			req := httptest.NewRequest(http.MethodGet, "/admin/announcements/7", nil)
-			w := httptest.NewRecorder()
-			newAdminEngine(t, repo).ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "編集対象の題")
+}
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Contains(t, w.Body.String(), tc.wantBodyContains)
-		})
+func TestShowEditRoute_ReturnsNotFoundForUnknownID(t *testing.T) {
+	repo := &port.MockAnnouncementRepo{
+		GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+			return nil, port.ErrNotFound
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), nil)
+	w := httptest.NewRecorder()
+	newAdminEngine(t, repo).ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
+}
+
+// newUpdateRequest は type のみ指定した更新 form の POST リクエストを組み立てる。
+func newUpdateRequest(t *testing.T) *http.Request {
+	t.Helper()
+	form := url.Values{"type": {domain.TypeInfo}}
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
+}
+
+// newUpdateRepoReturning は Update が指定エラーを返す repo モックを組み立てる。
+func newUpdateRepoReturning(repoErr error) *port.MockAnnouncementRepo {
+	return &port.MockAnnouncementRepo{
+		UpdateFn: func(_ context.Context, _ int64, _ domain.UpdateAnnouncementParams) error {
+			return repoErr
+		},
 	}
 }
 
-func TestUpdateRoute(t *testing.T) {
-	cases := []struct {
-		name             string
-		hxRequest        string
-		repoErr          error
-		wantStatus       int
-		wantLocation     string
-		wantHXRedirect   string
-		wantBodyContains string
-	}{
-		{
-			name:         "通常リクエストは 303 で一覧へ",
-			wantStatus:   http.StatusSeeOther,
-			wantLocation: "/admin/announcements",
-		},
-		{
-			name:           "HTMX リクエストは 200 + HX-Redirect ヘッダで一覧へ",
-			hxRequest:      "true",
-			wantStatus:     http.StatusOK,
-			wantHXRedirect: "/admin/announcements",
-		},
-		{
-			name:             "未存在 ID は 404",
-			repoErr:          port.ErrNotFound,
-			wantStatus:       http.StatusNotFound,
-			wantBodyContains: announcementadmin.ErrNotFound.Error(),
-		},
-	}
+func TestUpdateRoute_RedirectsToList(t *testing.T) {
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpdateRepoReturning(nil)).ServeHTTP(w, newUpdateRequest(t))
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &port.MockAnnouncementRepo{
-				UpdateFn: func(_ context.Context, _ int64, _ domain.UpdateAnnouncementParams) error {
-					return tc.repoErr
-				},
-			}
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, "/admin/announcements", w.Header().Get("Location"))
+}
 
-			form := url.Values{"type": {domain.TypeInfo}}
-			req := httptest.NewRequest(http.MethodPost, "/admin/announcements/7", strings.NewReader(form.Encode()))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.Header.Set("HX-Request", tc.hxRequest)
-			w := httptest.NewRecorder()
-			newAdminEngine(t, repo).ServeHTTP(w, req)
+func TestUpdateRoute_HTMXRedirectsToList(t *testing.T) {
+	req := newUpdateRequest(t)
+	req.Header.Set("HX-Request", "true")
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpdateRepoReturning(nil)).ServeHTTP(w, req)
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Equal(t, tc.wantLocation, w.Header().Get("Location"))
-			assert.Equal(t, tc.wantHXRedirect, w.Header().Get("HX-Redirect"))
-			assert.Contains(t, w.Body.String(), tc.wantBodyContains)
-		})
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "/admin/announcements", w.Header().Get("HX-Redirect"))
+}
+
+func TestUpdateRoute_ReturnsNotFoundForUnknownID(t *testing.T) {
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpdateRepoReturning(port.ErrNotFound)).ServeHTTP(w, newUpdateRequest(t))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
+}
+
+// newUpsertTranslationRequest は ja 翻訳の title / body を指定した upsert form の POST リクエストを組み立てる。
+func newUpsertTranslationRequest(t *testing.T) *http.Request {
+	t.Helper()
+	form := url.Values{"title": {"題"}, "body": {"本文"}}
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d/translations/ja", targetAnnouncementID), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
+}
+
+// newUpsertRepoReturning は UpsertTranslation が指定エラーを返す repo モックを組み立てる。
+func newUpsertRepoReturning(repoErr error) *port.MockAnnouncementRepo {
+	return &port.MockAnnouncementRepo{
+		UpsertTranslationFn: func(_ context.Context, _ int64, _, _, _ string) error {
+			return repoErr
+		},
 	}
 }
 
-func TestUpsertTranslationRoute(t *testing.T) {
-	cases := []struct {
-		name             string
-		hxRequest        string
-		repoErr          error
-		wantStatus       int
-		wantLocation     string
-		wantHXRedirect   string
-		wantBodyContains string
-	}{
-		{
-			name:         "通常リクエストは 303 で編集画面へ",
-			wantStatus:   http.StatusSeeOther,
-			wantLocation: "/admin/announcements/7",
-		},
-		{
-			name:           "HTMX リクエストは 200 + HX-Redirect ヘッダで編集画面へ",
-			hxRequest:      "true",
-			wantStatus:     http.StatusOK,
-			wantHXRedirect: "/admin/announcements/7",
-		},
-		{
-			name:             "未存在 ID は 404",
-			repoErr:          port.ErrNotFound,
-			wantStatus:       http.StatusNotFound,
-			wantBodyContains: announcementadmin.ErrNotFound.Error(),
-		},
-	}
+func TestUpsertTranslationRoute_RedirectsToEdit(t *testing.T) {
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpsertRepoReturning(nil)).ServeHTTP(w, newUpsertTranslationRequest(t))
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := &port.MockAnnouncementRepo{
-				UpsertTranslationFn: func(_ context.Context, _ int64, _, _, _ string) error {
-					return tc.repoErr
-				},
-			}
+	assert.Equal(t, http.StatusSeeOther, w.Code)
+	assert.Equal(t, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), w.Header().Get("Location"))
+}
 
-			form := url.Values{"title": {"題"}, "body": {"本文"}}
-			req := httptest.NewRequest(http.MethodPost, "/admin/announcements/7/translations/ja", strings.NewReader(form.Encode()))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.Header.Set("HX-Request", tc.hxRequest)
-			w := httptest.NewRecorder()
-			newAdminEngine(t, repo).ServeHTTP(w, req)
+func TestUpsertTranslationRoute_HTMXRedirectsToEdit(t *testing.T) {
+	req := newUpsertTranslationRequest(t)
+	req.Header.Set("HX-Request", "true")
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpsertRepoReturning(nil)).ServeHTTP(w, req)
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Equal(t, tc.wantLocation, w.Header().Get("Location"))
-			assert.Equal(t, tc.wantHXRedirect, w.Header().Get("HX-Redirect"))
-			assert.Contains(t, w.Body.String(), tc.wantBodyContains)
-		})
-	}
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), w.Header().Get("HX-Redirect"))
+}
+
+func TestUpsertTranslationRoute_ReturnsNotFoundForUnknownID(t *testing.T) {
+	w := httptest.NewRecorder()
+	newAdminEngine(t, newUpsertRepoReturning(port.ErrNotFound)).ServeHTTP(w, newUpsertTranslationRequest(t))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
 }
 
 func TestDeleteRoute_HTMXRemovesRow(t *testing.T) {
@@ -400,14 +363,14 @@ func TestDeleteRoute_HTMXRemovesRow(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/admin/announcements/42/delete", nil)
-	req.Header.Set("HX-Target", "row-42")
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d/delete", deletedAnnouncementID), nil)
+	req.Header.Set("HX-Target", fmt.Sprintf("row-%d", deletedAnnouncementID))
 	w := httptest.NewRecorder()
 	newAdminEngine(t, repo).ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Empty(t, w.Body.String())
-	assert.Equal(t, int64(42), gotDeletedID)
+	assert.Equal(t, deletedAnnouncementID, gotDeletedID)
 }
 
 // TestToAdminListItem は一覧ビューモデル変換の契約を固定する。
