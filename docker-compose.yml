@@ -1,15 +1,4 @@
-# support のローカル開発スタック。
-#
-# インフラ (Postgres) はホストへ publish せず、compose 内部ネットワークのサービス名 DNS
-# で参照する。ホストへ出すのは support 自身の API ポート (internal 9009 / admin 9109 /
-# external 9209) のみで、他リポと衝突しうる番号をホストに出さない。
-#
-# アプリはコンテナ内で `go run` し、ソースを bind-mount する。ソースを編集して
-# `support` コンテナを再起動すれば、イメージを作り直さずに最新コードが反映される。
-# private module は host の module cache (make run が go env GOMODCACHE を渡す) を
-# 読み取り専用でマウントして解決するため、コンテナ内での fetch もトークンも要らない。
-#
-# 起動: make run
+# support のローカル開発スタック。構成と使い方は README「ローカル開発」を参照。
 name: overload-party-support
 
 services:
