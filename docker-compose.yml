@@ -1,3 +1,17 @@
+# support のローカル開発スタック。
+#
+# インフラ (Postgres) はホストへ publish せず、compose 内部ネットワークのサービス名 DNS
+# で参照する。ホストへ出すのは support 自身の API ポート (internal 9009 / admin 9109 /
+# external 9209) のみで、他リポと衝突しうる番号をホストに出さない。
+#
+# アプリはコンテナ内で `go run` し、ソースを bind-mount する。ソースを編集して
+# `support` コンテナを再起動すれば、イメージを作り直さずに最新コードが反映される。
+# private module は host の module cache (make run が go env GOMODCACHE を渡す) を
+# 読み取り専用でマウントして解決するため、コンテナ内での fetch もトークンも要らない。
+#
+# 起動: make run
+name: overload-party-support
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,8 +19,6 @@ services:
       POSTGRES_USER: support
       POSTGRES_PASSWORD: support
       POSTGRES_DB: support
-    ports:
-      - "5432:5432"
     volumes:
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - support_pgdata:/var/lib/postgresql/data
@@ -16,5 +28,41 @@ services:
       timeout: 2s
       retries: 15
 
+  support:
+    image: golang:1.25-alpine
+    working_dir: /src
+    command: go run ./cmd/server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CGO_ENABLED: "0"
+      # module cache は host のものを読み取り専用でマウントするため、コンテナ内 fetch を
+      # 禁止して cache 欠落を即エラーにする。private module の解決は host 側 (make run の
+      # go mod download) が担い、コンテナはトークン無しで cache を読むだけにする。
+      GOPROXY: "off"
+      GOPRIVATE: github.com/kenyamaneko/*
+      # host の go.work (sibling module のローカル overlay) を bind-mount が持ち込むが、
+      # コンテナには sibling が無い。workspace を無効化し go.mod の公開版で解決させる。
+      GOWORK: "off"
+      ENV: local
+      INTERNAL_PORT: "9009"
+      ADMIN_PORT: "9109"
+      EXTERNAL_PORT: "9209"
+      DATABASE_CONN: host=postgres port=5432 dbname=support user=support password=support sslmode=disable
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      INQUIRY_BODY_SNIPPET_LENGTH: "200"
+      SENDGRID_FROM_ADDRESS: support@example.com
+      SENDGRID_FROM_NAME: Overload Party Support
+    volumes:
+      - ./:/src
+      - ${HOST_GOMODCACHE:?make run 経由で起動すること (go env GOMODCACHE を渡す必要がある)}:/go/pkg/mod:ro
+      - support_gobuild:/root/.cache/go-build
+    ports:
+      - "9009:9009"
+      - "9109:9109"
+      - "9209:9209"
+
 volumes:
   support_pgdata:
+  support_gobuild:
