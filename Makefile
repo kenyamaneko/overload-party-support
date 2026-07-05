@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt run tidy db-up db-down db-reset generate-types help
+.PHONY: build test vet fmt run tidy down generate-types help
 
 APP := overload-party-support
 
@@ -20,27 +20,12 @@ fmt: ## Format code
 generate-types: ## Re-generate packages/api-support/openapi_gen.go from data/openapi.yaml (requires oapi-codegen on PATH)
 	scripts/generate_types.sh
 
-db-up: ## Start local Postgres (docker compose)
-	docker compose up -d postgres
+down: ## Stop the local stack and remove volumes
+	HOST_GOMODCACHE=$$(go env GOMODCACHE) docker compose down -v
 
-db-down: ## Stop local Postgres
-	docker compose down
-
-db-reset: ## Drop volume and recreate DB
-	docker compose down -v
-	docker compose up -d postgres
-
-run: db-up ## Run support server locally against compose Postgres
-	ENV=local \
-	INTERNAL_PORT=9009 \
-	ADMIN_PORT=9109 \
-	EXTERNAL_PORT=9209 \
-	DATABASE_CONN="host=localhost port=5432 dbname=support user=support password=support sslmode=disable" \
-	CORS_ALLOWED_ORIGINS="http://localhost:3000" \
-	INQUIRY_BODY_SNIPPET_LENGTH=200 \
-	SENDGRID_FROM_ADDRESS="support@example.com" \
-	SENDGRID_FROM_NAME="Overload Party Support" \
-	go run ./cmd/server
+run: ## Run the full local stack (app + infra) in compose; edit source and restart `support` to reload
+	GOWORK=off GOPRIVATE=github.com/kenyamaneko/* go mod download
+	HOST_GOMODCACHE=$$(go env GOMODCACHE) docker compose up
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
