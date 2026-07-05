@@ -12,84 +12,81 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/handler/admin"
 )
 
-// 仕様 (FEATURE_SPEC §6.2 / ARCHITECTURE): production/staging では IAP ヘッダ必須。
-// ヘッダ値の email 部分を reviewer として context に注入する。
-func TestAuthMiddleware_RequireIAPInProduction(t *testing.T) {
-	cases := []struct {
-		name         string
-		header       string
-		wantStatus   int
-		wantReviewer string
-	}{
-		{
-			name:         "プロバイダープレフィックス付き",
-			header:       "accounts.google.com:alice@example.com",
-			wantStatus:   http.StatusOK,
-			wantReviewer: "alice@example.com",
-		},
-		{
-			name:         "プレフィックスなしも許容",
-			header:       "bob@example.com",
-			wantStatus:   http.StatusOK,
-			wantReviewer: "bob@example.com",
-		},
-		{
-			name:         "ヘッダ不在は 401",
-			header:       "",
-			wantStatus:   http.StatusUnauthorized,
-			wantReviewer: "",
-		},
-		{
-			name:         "プレフィックスのみで email 空は 401",
-			header:       "accounts.google.com:",
-			wantStatus:   http.StatusUnauthorized,
-			wantReviewer: "",
-		},
-	}
+func TestAuthMiddleware(t *testing.T) {
+	t.Run("管理画面の認証ミドルウェア", func(t *testing.T) {
+		t.Run("production 環境", func(t *testing.T) {
+			cases := []struct {
+				name         string
+				headers      map[string]string
+				wantStatus   int
+				wantReviewer string
+			}{
+				{
+					name:         "プロバイダープレフィックス付きヘッダのとき、prefix を除いた email が reviewer になる",
+					headers:      map[string]string{"X-Goog-Authenticated-User-Email": "accounts.google.com:alice@example.com"},
+					wantStatus:   http.StatusOK,
+					wantReviewer: "alice@example.com",
+				},
+				{
+					name:         "プレフィックスなしヘッダのとき、email がそのまま reviewer になる",
+					headers:      map[string]string{"X-Goog-Authenticated-User-Email": "bob@example.com"},
+					wantStatus:   http.StatusOK,
+					wantReviewer: "bob@example.com",
+				},
+				{
+					name:         "ヘッダが無いとき、401 になる",
+					headers:      nil,
+					wantStatus:   http.StatusUnauthorized,
+					wantReviewer: "",
+				},
+				{
+					name:         "プレフィックスのみで email が空のとき、401 になる",
+					headers:      map[string]string{"X-Goog-Authenticated-User-Email": "accounts.google.com:"},
+					wantStatus:   http.StatusUnauthorized,
+					wantReviewer: "",
+				},
+			}
 
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					gin.SetMode(gin.TestMode)
+					var seenReviewer string
+					r := gin.New()
+					r.Use(admin.AuthMiddleware(config.EnvProduction))
+					r.GET("/_probe", func(c *gin.Context) {
+						seenReviewer = admin.Reviewer(c)
+						c.Status(http.StatusOK)
+					})
+
+					req := httptest.NewRequest(http.MethodGet, "/_probe", nil)
+					for k, v := range tc.headers {
+						req.Header.Set(k, v)
+					}
+					w := httptest.NewRecorder()
+					r.ServeHTTP(w, req)
+
+					assert.Equal(t, tc.wantStatus, w.Code)
+					assert.Equal(t, tc.wantReviewer, seenReviewer)
+				})
+			}
+		})
+
+		t.Run("local 環境ではヘッダが無くても reviewer が注入される", func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			var seenReviewer string
 			r := gin.New()
-			r.Use(admin.AuthMiddleware(config.EnvProduction))
+			r.Use(admin.AuthMiddleware(config.EnvLocal))
 			r.GET("/_probe", func(c *gin.Context) {
 				seenReviewer = admin.Reviewer(c)
 				c.Status(http.StatusOK)
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "/_probe", nil)
-			switch tc.header {
-			case "":
-				// no header
-			default:
-				req.Header.Set("X-Goog-Authenticated-User-Email", tc.header)
-			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, tc.wantStatus, w.Code)
-			assert.Equal(t, tc.wantReviewer, seenReviewer)
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.NotEmpty(t, seenReviewer)
 		})
-	}
-}
-
-// 仕様 (FEATURE_SPEC §6.2): local 環境ではヘッダ不要で固定 reviewer を注入する。
-func TestAuthMiddleware_LocalSkipsHeader(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	var seenReviewer string
-	r := gin.New()
-	r.Use(admin.AuthMiddleware(config.EnvLocal))
-	r.GET("/_probe", func(c *gin.Context) {
-		seenReviewer = admin.Reviewer(c)
-		c.Status(http.StatusOK)
 	})
-
-	req := httptest.NewRequest(http.MethodGet, "/_probe", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.NotEmpty(t, seenReviewer, "local はヘッダ無しでも reviewer が注入されるべき")
 }
