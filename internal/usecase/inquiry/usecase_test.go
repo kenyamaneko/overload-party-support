@@ -15,256 +15,280 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 )
 
-// 仕様 (FEATURE_SPEC §7.1): Submit はバリデーション失敗時に副作用 (repo/slack/email) を一切呼ばない。
-func TestSubmit_InputValidation(t *testing.T) {
-	cases := []struct {
-		name     string
-		title    string
-		body     string
-		email    string
-		wantErr  error
-		wantCall bool
-	}{
-		{
-			name:     "正常",
-			title:    "T",
-			body:     "B",
-			email:    "user@example.com",
-			wantErr:  nil,
-			wantCall: true,
-		},
-		{
-			name:     "title 空",
-			title:    "",
-			body:     "B",
-			email:    "user@example.com",
-			wantErr:  inquiry.ErrInvalidInquiry,
-			wantCall: false,
-		},
-		{
-			name:     "body 空",
-			title:    "T",
-			body:     "",
-			email:    "user@example.com",
-			wantErr:  inquiry.ErrInvalidInquiry,
-			wantCall: false,
-		},
-		{
-			name:     "email 空",
-			title:    "T",
-			body:     "B",
-			email:    "",
-			wantErr:  inquiry.ErrInvalidInquiry,
-			wantCall: false,
-		},
-		{
-			name:     "title 上限超過 (101 文字)",
-			title:    strings.Repeat("あ", 101),
-			body:     "B",
-			email:    "u@e.com",
-			wantErr:  inquiry.ErrInvalidInquiry,
-			wantCall: false,
-		},
-		{
-			name:     "title 上限ちょうど (100 文字)",
-			title:    strings.Repeat("あ", 100),
-			body:     "B",
-			email:    "u@e.com",
-			wantErr:  nil,
-			wantCall: true,
-		},
-		{
-			name:     "body 上限超過 (4001 文字)",
-			title:    "T",
-			body:     strings.Repeat("あ", 4001),
-			email:    "u@e.com",
-			wantErr:  inquiry.ErrInvalidInquiry,
-			wantCall: false,
-		},
-		{
-			name:     "email 形式不正",
-			title:    "T",
-			body:     "B",
-			email:    "not-an-email",
-			wantErr:  inquiry.ErrInvalidEmail,
-			wantCall: false,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var createCalled, slackCalled, emailCalled bool
-			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
-					createCalled = true
-					return newInquiry(1), nil
+func TestSubmit(t *testing.T) {
+	t.Run("問い合わせの送信", func(t *testing.T) {
+		t.Run("入力バリデーション", func(t *testing.T) {
+			validCases := []struct {
+				name  string
+				title string
+				body  string
+				email string
+			}{
+				{
+					name:  "全項目が正常のとき、作成され repo・slack・email が呼ばれる",
+					title: "T",
+					body:  "B",
+					email: "user@example.com",
+				},
+				{
+					name:  "title が上限ちょうど (100 文字) のとき、作成され repo・slack・email が呼ばれる",
+					title: strings.Repeat("あ", 100),
+					body:  "B",
+					email: "u@e.com",
 				},
 			}
-			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
-					slackCalled = true
-					return nil
-				},
-			}
-			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
-					emailCalled = true
-					return nil
-				},
+			for _, tc := range validCases {
+				t.Run(tc.name, func(t *testing.T) {
+					var createCalled, slackCalled, emailCalled bool
+					store := &port.MockInquiryStore{
+						CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
+							createCalled = true
+							return newInquiry(1), nil
+						},
+					}
+					slack := &port.MockSlackNotifier{
+						NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							slackCalled = true
+							return nil
+						},
+					}
+					email := &port.MockEmailSender{
+						SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							emailCalled = true
+							return nil
+						},
+					}
+
+					_, err := inquiry.New(store, slack, email, 200).Submit(context.Background(), tc.title, tc.body, tc.email)
+
+					require.NoError(t, err)
+					assert.True(t, createCalled, "repo create called")
+					assert.True(t, slackCalled, "slack notify called")
+					assert.True(t, emailCalled, "email send called")
+				})
 			}
 
-			_, err := inquiry.New(store, slack, email, 200).Submit(context.Background(), tc.title, tc.body, tc.email)
+			invalidCases := []struct {
+				name    string
+				title   string
+				body    string
+				email   string
+				wantErr error
+			}{
+				{
+					name:    "title が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					title:   "",
+					body:    "B",
+					email:   "user@example.com",
+					wantErr: inquiry.ErrInvalidInquiry,
+				},
+				{
+					name:    "body が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					title:   "T",
+					body:    "",
+					email:   "user@example.com",
+					wantErr: inquiry.ErrInvalidInquiry,
+				},
+				{
+					name:    "email が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					title:   "T",
+					body:    "B",
+					email:   "",
+					wantErr: inquiry.ErrInvalidInquiry,
+				},
+				{
+					name:    "title が上限超過 (101 文字) のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					title:   strings.Repeat("あ", 101),
+					body:    "B",
+					email:   "u@e.com",
+					wantErr: inquiry.ErrInvalidInquiry,
+				},
+				{
+					name:    "body が上限超過 (4001 文字) のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					title:   "T",
+					body:    strings.Repeat("あ", 4001),
+					email:   "u@e.com",
+					wantErr: inquiry.ErrInvalidInquiry,
+				},
+				{
+					name:    "email が形式不正のとき、ErrInvalidEmail になり副作用は呼ばれない",
+					title:   "T",
+					body:    "B",
+					email:   "not-an-email",
+					wantErr: inquiry.ErrInvalidEmail,
+				},
+			}
+			for _, tc := range invalidCases {
+				t.Run(tc.name, func(t *testing.T) {
+					var createCalled, slackCalled, emailCalled bool
+					store := &port.MockInquiryStore{
+						CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
+							createCalled = true
+							return newInquiry(1), nil
+						},
+					}
+					slack := &port.MockSlackNotifier{
+						NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							slackCalled = true
+							return nil
+						},
+					}
+					email := &port.MockEmailSender{
+						SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							emailCalled = true
+							return nil
+						},
+					}
 
-			assert.ErrorIs(t, err, tc.wantErr)
-			assert.Equal(t, tc.wantCall, createCalled, "repo create called")
-			assert.Equal(t, tc.wantCall, slackCalled, "slack notify called")
-			assert.Equal(t, tc.wantCall, emailCalled, "email send called")
+					_, err := inquiry.New(store, slack, email, 200).Submit(context.Background(), tc.title, tc.body, tc.email)
+
+					assert.ErrorIs(t, err, tc.wantErr)
+					assert.False(t, createCalled, "repo create called")
+					assert.False(t, slackCalled, "slack notify called")
+					assert.False(t, emailCalled, "email send called")
+				})
+			}
 		})
-	}
-}
 
-// 仕様 (FEATURE_SPEC §7.1 / §7.3): Submit は DB → Slack → SendGrid の順で fail-fast。
-func TestSubmit_FailFastSideEffects(t *testing.T) {
-	dbErr := errors.New("db lost")
-	slackErr := errors.New("slack 500")
-	sendErr := errors.New("sendgrid 500")
+		t.Run("副作用の fail-fast", func(t *testing.T) {
+			dbErr := errors.New("db lost")
+			slackErr := errors.New("slack 500")
+			sendErr := errors.New("sendgrid 500")
 
-	cases := []struct {
-		name           string
-		createResult   *domain.Inquiry
-		createErr      error
-		slackErr       error
-		sendErr        error
-		wantCreateCall bool
-		wantSlackCall  bool
-		wantEmailCall  bool
-		wantErr        error
-	}{
-		{
-			name:           "DB 失敗 → slack/email 呼ばない",
-			createErr:      dbErr,
-			wantCreateCall: true,
-			wantSlackCall:  false,
-			wantEmailCall:  false,
-			wantErr:        dbErr,
-		},
-		{
-			name:           "Slack 失敗 → email 呼ばない",
-			createResult:   newInquiry(1),
-			slackErr:       slackErr,
-			wantCreateCall: true,
-			wantSlackCall:  true,
-			wantEmailCall:  false,
-			wantErr:        slackErr,
-		},
-		{
-			name:           "SendGrid 失敗 → エラーを透過",
-			createResult:   newInquiry(1),
-			sendErr:        sendErr,
-			wantCreateCall: true,
-			wantSlackCall:  true,
-			wantEmailCall:  true,
-			wantErr:        sendErr,
-		},
-		{
-			name:           "全部成功",
-			createResult:   newInquiry(1),
-			wantCreateCall: true,
-			wantSlackCall:  true,
-			wantEmailCall:  true,
-			wantErr:        nil,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var createCalled, slackCalled, emailCalled bool
-			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
-					createCalled = true
-					return tc.createResult, tc.createErr
+			cases := []struct {
+				name           string
+				createResult   *domain.Inquiry
+				createErr      error
+				slackErr       error
+				sendErr        error
+				wantCreateCall bool
+				wantSlackCall  bool
+				wantEmailCall  bool
+				wantErr        error
+			}{
+				{
+					name:           "repo create が失敗するとき、slack・email は呼ばれずそのエラーが返る",
+					createErr:      dbErr,
+					wantCreateCall: true,
+					wantSlackCall:  false,
+					wantEmailCall:  false,
+					wantErr:        dbErr,
 				},
-			}
-			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
-					slackCalled = true
-					return tc.slackErr
+				{
+					name:           "slack 通知が失敗するとき、email は呼ばれずそのエラーが返る",
+					createResult:   newInquiry(1),
+					slackErr:       slackErr,
+					wantCreateCall: true,
+					wantSlackCall:  true,
+					wantEmailCall:  false,
+					wantErr:        slackErr,
 				},
-			}
-			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
-					emailCalled = true
-					return tc.sendErr
+				{
+					name:           "email 送信が失敗するとき、そのエラーが透過される",
+					createResult:   newInquiry(1),
+					sendErr:        sendErr,
+					wantCreateCall: true,
+					wantSlackCall:  true,
+					wantEmailCall:  true,
+					wantErr:        sendErr,
+				},
+				{
+					name:           "全ステップ成功のとき、repo・slack・email が呼ばれエラーにならない",
+					createResult:   newInquiry(1),
+					wantCreateCall: true,
+					wantSlackCall:  true,
+					wantEmailCall:  true,
+					wantErr:        nil,
 				},
 			}
 
-			_, err := inquiry.New(store, slack, email, 200).Submit(context.Background(), "T", "B", "u@e.com")
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					var createCalled, slackCalled, emailCalled bool
+					store := &port.MockInquiryStore{
+						CreateFn: func(_ context.Context, _ string, _ string, _ string) (*domain.Inquiry, error) {
+							createCalled = true
+							return tc.createResult, tc.createErr
+						},
+					}
+					slack := &port.MockSlackNotifier{
+						NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							slackCalled = true
+							return tc.slackErr
+						},
+					}
+					email := &port.MockEmailSender{
+						SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error {
+							emailCalled = true
+							return tc.sendErr
+						},
+					}
 
-			assert.Equal(t, tc.wantCreateCall, createCalled, "create called")
-			assert.Equal(t, tc.wantSlackCall, slackCalled, "slack called")
-			assert.Equal(t, tc.wantEmailCall, emailCalled, "email called")
-			assert.ErrorIs(t, err, tc.wantErr)
+					_, err := inquiry.New(store, slack, email, 200).Submit(context.Background(), "T", "B", "u@e.com")
+
+					assert.Equal(t, tc.wantCreateCall, createCalled, "create called")
+					assert.Equal(t, tc.wantSlackCall, slackCalled, "slack called")
+					assert.Equal(t, tc.wantEmailCall, emailCalled, "email called")
+					assert.ErrorIs(t, err, tc.wantErr)
+				})
+			}
 		})
-	}
-}
 
-// 仕様 (FEATURE_SPEC §7.1 / §9.1): Slack 通知の snippet は body を先頭 N 文字に切り詰めて渡す。
-func TestSubmit_SnippetLength(t *testing.T) {
-	cases := []struct {
-		name        string
-		body        string
-		snippetLen  int
-		wantSnippet string
-	}{
-		{
-			name:        "body 短いのでそのまま",
-			body:        "short",
-			snippetLen:  200,
-			wantSnippet: "short",
-		},
-		{
-			name:        "ちょうど N 文字は切り詰めない",
-			body:        strings.Repeat("あ", 200),
-			snippetLen:  200,
-			wantSnippet: strings.Repeat("あ", 200),
-		},
-		{
-			name:        "N 文字超過は先頭のみ",
-			body:        strings.Repeat("あ", 300),
-			snippetLen:  50,
-			wantSnippet: strings.Repeat("あ", 50),
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			var gotSnippet string
-			store := &port.MockInquiryStore{
-				CreateFn: func(_ context.Context, _ string, body string, _ string) (*domain.Inquiry, error) {
-					inq := newInquiry(1)
-					inq.Body = body
-					return inq, nil
+		t.Run("Slack snippet の切り詰め", func(t *testing.T) {
+			cases := []struct {
+				name        string
+				body        string
+				snippetLen  int
+				wantSnippet string
+			}{
+				{
+					name:        "body が snippet 長より短いとき、そのまま渡される",
+					body:        "short",
+					snippetLen:  200,
+					wantSnippet: "short",
+				},
+				{
+					name:        "body が snippet 長ちょうど (200 文字) のとき、切り詰めない",
+					body:        strings.Repeat("あ", 200),
+					snippetLen:  200,
+					wantSnippet: strings.Repeat("あ", 200),
+				},
+				{
+					name:        "body が snippet 長超過のとき、先頭 (50 文字) のみ渡される",
+					body:        strings.Repeat("あ", 300),
+					snippetLen:  50,
+					wantSnippet: strings.Repeat("あ", 50),
 				},
 			}
-			slack := &port.MockSlackNotifier{
-				NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, snippet string) error {
-					gotSnippet = snippet
-					return nil
-				},
-			}
-			email := &port.MockEmailSender{
-				SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
-			}
 
-			_, err := inquiry.New(store, slack, email, tc.snippetLen).Submit(context.Background(), "T", tc.body, "u@e.com")
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					var gotSnippet string
+					store := &port.MockInquiryStore{
+						CreateFn: func(_ context.Context, _ string, body string, _ string) (*domain.Inquiry, error) {
+							inq := newInquiry(1)
+							inq.Body = body
+							return inq, nil
+						},
+					}
+					slack := &port.MockSlackNotifier{
+						NotifyInquiryReceivedFn: func(_ context.Context, _ *domain.Inquiry, snippet string) error {
+							gotSnippet = snippet
+							return nil
+						},
+					}
+					email := &port.MockEmailSender{
+						SendInquiryReceiptFn: func(_ context.Context, _ *domain.Inquiry, _ string) error { return nil },
+					}
 
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantSnippet, gotSnippet)
+					_, err := inquiry.New(store, slack, email, tc.snippetLen).Submit(context.Background(), "T", tc.body, "u@e.com")
+
+					require.NoError(t, err)
+					assert.Equal(t, tc.wantSnippet, gotSnippet)
+				})
+			}
 		})
-	}
+	})
 }
 
 func newInquiry(id int64) *domain.Inquiry {
