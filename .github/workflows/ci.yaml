@@ -44,7 +44,13 @@ jobs:
       - name: Pre-pull postgres image (Testcontainers)
         run: docker pull postgres:16-alpine
       - name: Run tests
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 ./... -json | tee go-test-unit.json
+      - name: Report test results
+        if: ${{ !cancelled() }}
+        uses: kenyamaneko/overload-party-common/.github/actions/go-test-report@main
+        with:
+          json-path: go-test-unit.json
+          title: 単体テスト結果
 
   image-scan:
     runs-on: ubicloud-standard-2
