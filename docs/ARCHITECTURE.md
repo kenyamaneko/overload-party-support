@@ -47,7 +47,7 @@ support は同一バイナリ・同一 Pod で 3 つのポートを listen し�
                   └─ X-Goog-Authenticated-User-Email ヘッダを付与
 ```
 
-support 側の `iapMiddleware` はヘッダ存在確認と context への email 注入のみ行う（将来「誰が編集したか」を記録する場合に備えた土台）。許可ユーザーリストの管理は IAP 側に閉じる:
+support 側の `AuthMiddleware` はヘッダ存在確認と context への email 注入のみ行う（将来「誰が編集したか」を記録する場合に備えた土台）。許可ユーザーリストの管理は IAP 側に閉じる:
 
 - 運用者追加のたびに support のデプロイが必要になるのを避ける
 - IAP の IAM 管理 UI で完結させる方が運用者にとって自然
@@ -55,7 +55,7 @@ support 側の `iapMiddleware` はヘッダ存在確認と context への email 
 
 ### ENV=local での認証スキップ
 
-ローカル開発では `iapMiddleware` がパススルーしヘッダ無しで通る。この分岐は `ENV` env var のみで制御し、コードフラグで制御しない（「production で誤ってスキップが有効になる」リスクを env 設定に集約）。
+ローカル開発では `AuthMiddleware` がパススルーしヘッダ無しで通る。この分岐は `ENV` env var のみで制御し、コードフラグで制御しない（「production で誤ってスキップが有効になる」リスクを env 設定に集約）。
 
 ## HTMX レンダリング層の構造
 
@@ -96,9 +96,9 @@ HTMX は `hx-target` / `hx-swap` で DOM の一部を差し替える。新規作
 
 1. DB が最優先。DB に行が残らなければ、後続の副作用が成功しても運営・ユーザー双方の情報がどこにも残らない
 2. Slack は運営向けの早期通知。運営が問い合わせを把握できる状態にしてからユーザーに受付確認を送る
-3. SendGrid はユーザー向けの受付確認。Slack が失敗しているときに「受付完了メール」だけが届くと、ユーザーは成立と認識するが運営は気づかない — 最悪の食い違いパターンになるため、Slack 成功を先に確定させる
+3. SendGrid はユーザー向けの受付確認。Slack が失敗しているときに「受付完了メール」だけが届くと、ユーザーは成立と認識するが運営は気づかない。これは最悪の食い違いパターンになるため、Slack 成功を先に確定させる
 
-失敗は fail-fast で即 return。Slack が失敗した時点で SendGrid を打たない（上記の食い違い防止）。呼び出し元にはエラーを返し、DB 行は残るため、運営は管理 UI で問い合わせ一覧から救済する（[FEATURE_SPEC §8](FEATURE_SPEC.md)）。
+失敗は fail-fast で即 return。Slack が失敗した時点で SendGrid を打たない（上記の食い違い防止）。呼び出し元にはエラーを返し、DB 行は残るため、運営は管理 UI で問い合わせ一覧から救済する（[FEATURE_SPEC「問い合わせステータス管理」](FEATURE_SPEC.md)）。
 
 ### トランザクション境界を跨ぐのは 1 点のみ
 
@@ -124,7 +124,7 @@ Slack 通知・SendGrid 送信は **adapter 層のクライアント** として
 
 指定 `lang` の翻訳が存在しない記事はフォールバックせず、一覧から除外・詳細で 404 を返す（CLAUDE.md「デフォルト値へのフォールバックを行わない」に従う）。翻訳の未整備を運営に対して「サイレントに成功しない」ことで可視化し、運用者責務で補完させる。
 
-新規作成時は本体と ja 翻訳を **同一トランザクション** で INSERT する（[FEATURE_SPEC §6.4](FEATURE_SPEC.md)）。翻訳 0 件のお知らせが作られない状態を DB レベルで保証し、公開契約を構造的に守る。詳細なスキーマは [DATA_DESIGN.md](DATA_DESIGN.md) を参照。
+新規作成時は本体と ja 翻訳を **同一トランザクション** で INSERT する（[FEATURE_SPEC「本体 CRUD」](FEATURE_SPEC.md)）。翻訳 0 件のお知らせが作られない状態を DB レベルで保証し、公開契約を構造的に守る。詳細なスキーマは [DATA_DESIGN.md](DATA_DESIGN.md) を参照。
 
 ## 下書きは `published_at = NULL` で表現する
 
