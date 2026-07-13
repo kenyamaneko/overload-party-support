@@ -147,6 +147,17 @@ func TestListPublished(t *testing.T) {
 					PublishedAt:  &past,
 					Translations: jaTr("published_at<=now (ja only)", "B"),
 				},
+				{
+					Type:         domain.TypeInfo,
+					PublishedAt:  &fixedNow,
+					Translations: jaTr("published_at==now", "B"),
+				},
+				{
+					Type:         domain.TypeInfo,
+					PublishedAt:  &farPast,
+					ExpiresAt:    &fixedNow,
+					Translations: jaTr("expires_at==now", "B"),
+				},
 			}
 			for _, p := range seeds {
 				_, err := repo.Create(ctx, p)
@@ -159,12 +170,13 @@ func TestListPublished(t *testing.T) {
 				wantTitles []string
 			}{
 				{
-					name: "lang=ja のとき、公開条件を満たす 3 件 (ja+en 行 / ja only 行 / expires_at>now 行) を返す",
+					name: "lang=ja のとき、公開条件を満たす行 (ja+en 行 / ja only 行 / expires_at>now 行 / published_at==now 行) を返す (expires_at==now は含まない)",
 					lang: domain.LangJa,
 					wantTitles: []string{
 						"published_at<=now (ja+en)",
 						"published_at<=now (ja only)",
 						"expires_at>now",
+						"published_at==now",
 					},
 				},
 				{
@@ -249,6 +261,8 @@ func TestList(t *testing.T) {
 			{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("published", "B")},
 			{Type: domain.TypeEvent, PublishedAt: &farPast, ExpiresAt: &past, Translations: jaTr("expired", "B")},
 			{Type: domain.TypeInfo, PublishedAt: nil, ExpiresAt: &past, Translations: jaTr("draft with past expires", "B")},
+			{Type: domain.TypeInfo, PublishedAt: &fixedNow, Translations: jaTr("published_at==now", "B")},
+			{Type: domain.TypeInfo, PublishedAt: &farPast, ExpiresAt: &fixedNow, Translations: jaTr("expires_at==now", "B")},
 		}
 		for _, p := range seeds {
 			_, err := repo.Create(ctx, p)
@@ -261,9 +275,12 @@ func TestList(t *testing.T) {
 			wantTitles []string
 		}{
 			{
-				name:       "state=nil のとき、全件を返す",
-				state:      nil,
-				wantTitles: []string{"draft", "scheduled", "published", "expired", "draft with past expires"},
+				name:  "state=nil のとき、全件を返す",
+				state: nil,
+				wantTitles: []string{
+					"draft", "scheduled", "published", "expired", "draft with past expires",
+					"published_at==now", "expires_at==now",
+				},
 			},
 			{
 				name:       "state=Draft のとき、PublishedAt IS NULL の 2 件を返す (expires_at の値に依存しない)",
@@ -271,19 +288,19 @@ func TestList(t *testing.T) {
 				wantTitles: []string{"draft", "draft with past expires"},
 			},
 			{
-				name:       "state=Scheduled のとき、PublishedAt > now の 1 件を返す",
+				name:       "state=Scheduled のとき、PublishedAt > now の 1 件を返す (PublishedAt==now は含まない)",
 				state:      &scheduled,
 				wantTitles: []string{"scheduled"},
 			},
 			{
-				name:       "state=Published のとき、公開時刻到達済みかつ未失効の 1 件を返す",
+				name:       "state=Published のとき、公開時刻到達済みかつ未失効の行を返す (PublishedAt==now を含み、ExpiresAt==now は含まない)",
 				state:      &published,
-				wantTitles: []string{"published"},
+				wantTitles: []string{"published", "published_at==now"},
 			},
 			{
-				name:       "state=Expired のとき、PublishedAt が過去かつ ExpiresAt が過去の 1 件を返す (Draft 系は含まない)",
+				name:       "state=Expired のとき、PublishedAt が過去かつ ExpiresAt が過去以下の行を返す (ExpiresAt==now を含む、Draft 系は含まない)",
 				state:      &expired,
-				wantTitles: []string{"expired"},
+				wantTitles: []string{"expired", "expires_at==now"},
 			},
 		}
 

@@ -96,110 +96,133 @@ func TestFromEnv(t *testing.T) {
 		}
 
 		// 欠落・不正な env はデフォルト値へフォールバックせず即エラーにする。
+		// wantErrContains で不変条件ごとにエラー原因を識別し、無関係な検証の巻き添えで
+		// 緑にならないようにする。
 		invalidCases := []struct {
-			name   string
-			base   func() map[string]string
-			mutate func(m map[string]string)
+			name            string
+			base            func() map[string]string
+			mutate          func(m map[string]string)
+			wantErrContains string
 		}{
 			{
-				name:   "ENV が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "ENV") },
+				name:            "ENV が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "ENV") },
+				wantErrContains: "ENV is required",
 			},
 			{
-				name:   "ENV が未知値のとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["ENV"] = "dev" },
+				name:            "ENV が未知値のとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["ENV"] = "dev" },
+				wantErrContains: "ENV: unsupported value",
 			},
 			{
-				name:   "INTERNAL_PORT が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "INTERNAL_PORT") },
+				name:            "INTERNAL_PORT が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "INTERNAL_PORT") },
+				wantErrContains: "INTERNAL_PORT is required",
 			},
 			{
-				name:   "INTERNAL_PORT が非整数のとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["INTERNAL_PORT"] = "abc" },
+				name:            "INTERNAL_PORT が非整数のとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["INTERNAL_PORT"] = "abc" },
+				wantErrContains: "INTERNAL_PORT: not an integer",
 			},
 			{
-				name:   "ADMIN_PORT が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "ADMIN_PORT") },
+				name:            "ADMIN_PORT が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "ADMIN_PORT") },
+				wantErrContains: "ADMIN_PORT is required",
 			},
 			{
-				name:   "EXTERNAL_PORT が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "EXTERNAL_PORT") },
+				name:            "EXTERNAL_PORT が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "EXTERNAL_PORT") },
+				wantErrContains: "EXTERNAL_PORT is required",
 			},
 			{
-				name:   "internal と admin が同ポートのとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["ADMIN_PORT"] = m["INTERNAL_PORT"] },
+				name:            "internal と admin が同ポートのとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["ADMIN_PORT"] = m["INTERNAL_PORT"] },
+				wantErrContains: "must all differ",
 			},
 			{
-				name:   "internal と external が同ポートのとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["EXTERNAL_PORT"] = m["INTERNAL_PORT"] },
+				name:            "internal と external が同ポートのとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["EXTERNAL_PORT"] = m["INTERNAL_PORT"] },
+				wantErrContains: "must all differ",
 			},
 			{
-				name:   "admin と external が同ポートのとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["EXTERNAL_PORT"] = m["ADMIN_PORT"] },
+				name:            "admin と external が同ポートのとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["EXTERNAL_PORT"] = m["ADMIN_PORT"] },
+				wantErrContains: "must all differ",
 			},
 			{
-				name:   "DATABASE_CONN が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "DATABASE_CONN") },
+				name:            "DATABASE_CONN が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "DATABASE_CONN") },
+				wantErrContains: "DATABASE_CONN is required",
 			},
 			{
-				name:   "CORS_ALLOWED_ORIGINS が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "CORS_ALLOWED_ORIGINS") },
+				name:            "CORS_ALLOWED_ORIGINS が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "CORS_ALLOWED_ORIGINS") },
+				wantErrContains: "CORS_ALLOWED_ORIGINS is required",
 			},
 			{
-				name:   "CORS_ALLOWED_ORIGINS が空 (カンマのみ) のとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["CORS_ALLOWED_ORIGINS"] = ", ," },
+				name:            "CORS_ALLOWED_ORIGINS が空 (カンマのみ) のとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["CORS_ALLOWED_ORIGINS"] = ", ," },
+				wantErrContains: "at least one origin required",
 			},
 			{
-				name:   "INQUIRY_BODY_SNIPPET_LENGTH が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "INQUIRY_BODY_SNIPPET_LENGTH") },
+				name:            "INQUIRY_BODY_SNIPPET_LENGTH が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "INQUIRY_BODY_SNIPPET_LENGTH") },
+				wantErrContains: "INQUIRY_BODY_SNIPPET_LENGTH is required",
 			},
 			{
-				name:   "INQUIRY_BODY_SNIPPET_LENGTH が 0 のとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["INQUIRY_BODY_SNIPPET_LENGTH"] = "0" },
+				name:            "INQUIRY_BODY_SNIPPET_LENGTH が 0 のとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["INQUIRY_BODY_SNIPPET_LENGTH"] = "0" },
+				wantErrContains: "must be positive, got 0",
 			},
 			{
-				name:   "INQUIRY_BODY_SNIPPET_LENGTH が -1 のとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { m["INQUIRY_BODY_SNIPPET_LENGTH"] = "-1" },
+				name:            "INQUIRY_BODY_SNIPPET_LENGTH が -1 のとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["INQUIRY_BODY_SNIPPET_LENGTH"] = "-1" },
+				wantErrContains: "must be positive, got -1",
 			},
 			{
-				name:   "SENDGRID_FROM_ADDRESS が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "SENDGRID_FROM_ADDRESS") },
+				name:            "SENDGRID_FROM_ADDRESS が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "SENDGRID_FROM_ADDRESS") },
+				wantErrContains: "SENDGRID_FROM_ADDRESS is required",
 			},
 			{
-				name:   "SENDGRID_FROM_NAME が欠けるとき、エラーになる",
-				base:   validLocalEnv,
-				mutate: func(m map[string]string) { delete(m, "SENDGRID_FROM_NAME") },
+				name:            "SENDGRID_FROM_NAME が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "SENDGRID_FROM_NAME") },
+				wantErrContains: "SENDGRID_FROM_NAME is required",
 			},
 			{
-				name:   "production で SLACK_BOT_TOKEN が欠けるとき、エラーになる",
-				base:   validProdEnv,
-				mutate: func(m map[string]string) { delete(m, "SLACK_BOT_TOKEN") },
+				name:            "production で SLACK_BOT_TOKEN が欠けるとき、エラーになる",
+				base:            validProdEnv,
+				mutate:          func(m map[string]string) { delete(m, "SLACK_BOT_TOKEN") },
+				wantErrContains: "SLACK_BOT_TOKEN is required when ENV=production",
 			},
 			{
-				name:   "production で SLACK_CHANNEL_ID が欠けるとき、エラーになる",
-				base:   validProdEnv,
-				mutate: func(m map[string]string) { delete(m, "SLACK_CHANNEL_ID") },
+				name:            "production で SLACK_CHANNEL_ID が欠けるとき、エラーになる",
+				base:            validProdEnv,
+				mutate:          func(m map[string]string) { delete(m, "SLACK_CHANNEL_ID") },
+				wantErrContains: "SLACK_CHANNEL_ID is required when ENV=production",
 			},
 			{
-				name:   "production で SENDGRID_API_KEY が欠けるとき、エラーになる",
-				base:   validProdEnv,
-				mutate: func(m map[string]string) { delete(m, "SENDGRID_API_KEY") },
+				name:            "production で SENDGRID_API_KEY が欠けるとき、エラーになる",
+				base:            validProdEnv,
+				mutate:          func(m map[string]string) { delete(m, "SENDGRID_API_KEY") },
+				wantErrContains: "SENDGRID_API_KEY is required when ENV=production",
 			},
 			{
 				name: "staging で SLACK_BOT_TOKEN が欠けるとき、エラーになる",
@@ -208,6 +231,7 @@ func TestFromEnv(t *testing.T) {
 					m["ENV"] = "staging"
 					delete(m, "SLACK_BOT_TOKEN")
 				},
+				wantErrContains: "SLACK_BOT_TOKEN is required when ENV=staging",
 			},
 		}
 		for _, tc := range invalidCases {
@@ -220,6 +244,7 @@ func TestFromEnv(t *testing.T) {
 
 				require.Error(t, err)
 				require.Nil(t, cfg)
+				assert.Contains(t, err.Error(), tc.wantErrContains)
 			})
 		}
 
