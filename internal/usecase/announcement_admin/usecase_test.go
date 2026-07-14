@@ -242,42 +242,45 @@ func TestList(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	t.Run("告知の取得", func(t *testing.T) {
-		dbErr := errors.New("db lost")
-		okResult := &domain.AnnouncementWithTranslations{
-			Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo},
-		}
+		t.Run("repo が成功するとき、戻り値が透過される", func(t *testing.T) {
+			okResult := &domain.AnnouncementWithTranslations{
+				Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo},
+			}
+			repo := &port.MockAnnouncementRepo{
+				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+					return okResult, nil
+				},
+			}
 
-		cases := []struct {
-			name       string
-			repoResult *domain.AnnouncementWithTranslations
-			repoErr    error
-			wantErr    error
+			got, err := announcementadmin.New(repo, nowFixed).Get(context.Background(), 1)
+
+			require.NoError(t, err)
+			assert.Equal(t, okResult, got)
+		})
+
+		dbErr := errors.New("db lost")
+		errorCases := []struct {
+			name    string
+			repoErr error
+			wantErr error
 		}{
 			{
-				name:       "repo が成功するとき、エラーにならない",
-				repoResult: okResult,
-				repoErr:    nil,
-				wantErr:    nil,
+				name:    "repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる",
+				repoErr: port.ErrNotFound,
+				wantErr: announcementadmin.ErrNotFound,
 			},
 			{
-				name:       "repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる",
-				repoResult: nil,
-				repoErr:    port.ErrNotFound,
-				wantErr:    announcementadmin.ErrNotFound,
-			},
-			{
-				name:       "repo がその他のエラーを返すとき、そのエラーが透過される",
-				repoResult: nil,
-				repoErr:    dbErr,
-				wantErr:    dbErr,
+				name:    "repo がその他のエラーを返すとき、そのエラーが透過される",
+				repoErr: dbErr,
+				wantErr: dbErr,
 			},
 		}
 
-		for _, tc := range cases {
+		for _, tc := range errorCases {
 			t.Run(tc.name, func(t *testing.T) {
 				repo := &port.MockAnnouncementRepo{
 					GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
-						return tc.repoResult, tc.repoErr
+						return nil, tc.repoErr
 					},
 				}
 				_, err := announcementadmin.New(repo, nowFixed).Get(context.Background(), 1)
@@ -290,7 +293,6 @@ func TestGet(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	t.Run("告知の更新", func(t *testing.T) {
 		dbErr := errors.New("db")
-
 		cases := []struct {
 			name    string
 			repoErr error
@@ -330,7 +332,6 @@ func TestUpdate(t *testing.T) {
 func TestDelete(t *testing.T) {
 	t.Run("告知の削除", func(t *testing.T) {
 		dbErr := errors.New("db")
-
 		cases := []struct {
 			name    string
 			repoErr error
