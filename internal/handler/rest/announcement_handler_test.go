@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
+	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
@@ -214,5 +216,44 @@ func TestAnnouncementGetDetail(t *testing.T) {
 				assert.Equal(t, tc.wantStatus, w.Code)
 			})
 		}
+
+		t.Run("公開済みの告知が存在する ID を指定するとき、200 で本体が返る", func(t *testing.T) {
+			sharedPG.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
+			ctx := context.Background()
+			past := time.Now().Add(-time.Hour)
+			id, err := repo.Create(ctx, domain.CreateAnnouncementParams{
+				Type:        domain.TypeInfo,
+				PublishedAt: &past,
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "実DBタイトル", Body: "実DB本文"},
+				},
+			})
+			require.NoError(t, err)
+
+			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/support/announcements/%d?lang=ja", id), nil)
+			w := httptest.NewRecorder()
+			newAnnouncementEngine(h).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var resp apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Equal(t, id, resp.AnnouncementID)
+			require.Equal(t, "実DBタイトル", resp.Title)
+			require.Equal(t, "実DB本文", resp.Body)
+		})
+
+		t.Run("存在しない ID を指定するとき、404 になる", func(t *testing.T) {
+			sharedPG.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
+			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/999999?lang=ja", nil)
+			w := httptest.NewRecorder()
+			newAnnouncementEngine(h).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+		})
 	})
 }
