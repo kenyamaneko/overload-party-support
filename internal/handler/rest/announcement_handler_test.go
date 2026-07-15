@@ -95,7 +95,7 @@ func TestAnnouncementList(t *testing.T) {
 			assert.Empty(t, resp.Announcements)
 		})
 
-		t.Run("各 summary フィールドが wire に反映される", func(t *testing.T) {
+		t.Run("各告知の項目が応答に反映される", func(t *testing.T) {
 			pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 			repo := &port.MockAnnouncementRepo{
 				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {

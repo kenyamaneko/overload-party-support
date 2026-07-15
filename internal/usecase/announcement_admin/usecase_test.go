@@ -143,7 +143,7 @@ func TestCreate(t *testing.T) {
 			require.NoError(t, err)
 		})
 
-		t.Run("バリデーション通過後、type と翻訳群が port にそのまま転送される", func(t *testing.T) {
+		t.Run("作成すると、指定した種別と翻訳がそのまま保存される", func(t *testing.T) {
 			var got domain.CreateAnnouncementParams
 			repo := &port.MockAnnouncementRepo{
 				CreateFn: func(_ context.Context, p domain.CreateAnnouncementParams) (int64, error) {
@@ -230,8 +230,8 @@ func TestList(t *testing.T) {
 			})
 		}
 
-		t.Run("未知の status のとき、ErrInvalidStatusFilter になり repo を呼ばない", func(t *testing.T) {
-			// ListFn を未設定にすることで、呼ばれた瞬間に panic して「repo に到達しない」ことを担保する (MockAnnouncementRepo 契約)。
+		t.Run("未知の status のとき、ErrInvalidStatusFilter になる", func(t *testing.T) {
+			// ListFn を未設定にすることで、絞り込みに到達する前に弾かれることを担保する。
 			repo := &port.MockAnnouncementRepo{}
 			_, err := announcementadmin.New(repo, nowFixed).List(context.Background(), "invalid")
 

@@ -11,7 +11,7 @@ import (
 
 func TestDeriveState(t *testing.T) {
 	// 判定順序が state の排他性を担保する。特に PublishedAt が NULL の record は ExpiresAt の値に依存せず Draft になる。
-	t.Run("state の導出", func(t *testing.T) {
+	t.Run("公開状態の導出", func(t *testing.T) {
 		now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 		past := now.Add(-time.Hour)
 		future := now.Add(time.Hour)

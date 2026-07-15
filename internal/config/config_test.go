@@ -51,7 +51,7 @@ func validProdEnv() map[string]string {
 }
 
 func TestFromEnv(t *testing.T) {
-	t.Run("環境変数からの Config 構築", func(t *testing.T) {
+	t.Run("環境変数からの設定構築", func(t *testing.T) {
 		validCases := []struct {
 			name   string
 			base   func() map[string]string
@@ -246,7 +246,7 @@ func TestFromEnv(t *testing.T) {
 			})
 		}
 
-		t.Run("全 env が Config の各フィールドに反映される", func(t *testing.T) {
+		t.Run("全ての環境変数が設定値に反映される", func(t *testing.T) {
 			m := validProdEnv()
 			m["INTERNAL_PORT"] = "12345"
 			m["ADMIN_PORT"] = "12346"
