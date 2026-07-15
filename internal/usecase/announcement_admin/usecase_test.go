@@ -242,7 +242,7 @@ func TestList(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	t.Run("告知の取得", func(t *testing.T) {
-		t.Run("repo が成功するとき、戻り値が透過される", func(t *testing.T) {
+		t.Run("告知が存在するとき、その内容が返る", func(t *testing.T) {
 			okResult := &domain.AnnouncementWithTranslations{
 				Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo},
 			}
@@ -265,12 +265,12 @@ func TestGet(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる",
+				name:    "告知が見つからないとき、ErrNotFound になる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
 			{
-				name:    "repo がその他のエラーを返すとき、そのエラーが透過される",
+				name:    "想定外のエラーが起きたとき、そのエラーがそのまま返る",
 				repoErr: dbErr,
 				wantErr: dbErr,
 			},
@@ -299,17 +299,17 @@ func TestUpdate(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "repo が成功するとき、エラーにならない",
+				name:    "更新対象が存在するとき、エラーにならない",
 				repoErr: nil,
 				wantErr: nil,
 			},
 			{
-				name:    "repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる",
+				name:    "告知が見つからないとき、ErrNotFound になる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
 			{
-				name:    "repo がその他のエラーを返すとき、そのエラーが透過される",
+				name:    "想定外のエラーが起きたとき、そのエラーがそのまま返る",
 				repoErr: dbErr,
 				wantErr: dbErr,
 			},
@@ -338,17 +338,17 @@ func TestDelete(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "repo が成功するとき、エラーにならない",
+				name:    "削除対象が存在するとき、エラーにならない",
 				repoErr: nil,
 				wantErr: nil,
 			},
 			{
-				name:    "repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる",
+				name:    "告知が見つからないとき、ErrNotFound になる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
 			{
-				name:    "repo がその他のエラーを返すとき、そのエラーが透過される",
+				name:    "想定外のエラーが起きたとき、そのエラーがそのまま返る",
 				repoErr: dbErr,
 				wantErr: dbErr,
 			},
@@ -408,7 +408,7 @@ func TestUpsertTranslation(t *testing.T) {
 			})
 		}
 
-		t.Run("repo が port.ErrNotFound を返すとき、usecase の ErrNotFound にマップされる", func(t *testing.T) {
+		t.Run("告知が見つからないとき、ErrNotFound になる", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				UpsertTranslationFn: func(_ context.Context, _ int64, _ string, _ string, _ string) error {
 					return port.ErrNotFound
