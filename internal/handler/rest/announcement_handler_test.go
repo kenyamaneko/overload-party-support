@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
+	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
 	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
@@ -93,7 +95,7 @@ func TestAnnouncementList(t *testing.T) {
 			assert.Empty(t, resp.Announcements)
 		})
 
-		t.Run("各 summary フィールドが wire に反映される", func(t *testing.T) {
+		t.Run("各告知の項目が応答に反映される", func(t *testing.T) {
 			pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 			repo := &port.MockAnnouncementRepo{
 				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
@@ -163,30 +165,14 @@ func TestAnnouncementGetDetail(t *testing.T) {
 		}
 
 		dbErr := errors.New("db lost")
-		okDetail := &domain.AnnouncementDetail{AnnouncementID: 1, Type: domain.TypeInfo}
 
 		statusCases := []struct {
 			name       string
 			id         string
 			query      string
-			detail     *domain.AnnouncementDetail
 			repoErr    error
 			wantStatus int
 		}{
-			{
-				name:       "正常のとき、200 になる",
-				id:         "1",
-				query:      "?lang=ja",
-				detail:     okDetail,
-				wantStatus: http.StatusOK,
-			},
-			{
-				name:       "not found のとき、404 になる",
-				id:         "1",
-				query:      "?lang=ja",
-				repoErr:    port.ErrNotFound,
-				wantStatus: http.StatusNotFound,
-			},
 			{
 				name:       "非数値 ID のとき、404 になる",
 				id:         "abc",
@@ -218,7 +204,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				repo := &port.MockAnnouncementRepo{
 					GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
-						return tc.detail, tc.repoErr
+						return nil, tc.repoErr
 					},
 				}
 				h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
@@ -230,5 +216,44 @@ func TestAnnouncementGetDetail(t *testing.T) {
 				assert.Equal(t, tc.wantStatus, w.Code)
 			})
 		}
+
+		t.Run("公開済みの告知が存在する ID を指定するとき、200 で本体が返る", func(t *testing.T) {
+			sharedPG.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
+			ctx := context.Background()
+			past := time.Now().Add(-time.Hour)
+			id, err := repo.Create(ctx, domain.CreateAnnouncementParams{
+				Type:        domain.TypeInfo,
+				PublishedAt: &past,
+				Translations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "実DBタイトル", Body: "実DB本文"},
+				},
+			})
+			require.NoError(t, err)
+
+			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/support/announcements/%d?lang=ja", id), nil)
+			w := httptest.NewRecorder()
+			newAnnouncementEngine(h).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var resp apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Equal(t, id, resp.AnnouncementID)
+			require.Equal(t, "実DBタイトル", resp.Title)
+			require.Equal(t, "実DB本文", resp.Body)
+		})
+
+		t.Run("存在しない ID を指定するとき、404 になる", func(t *testing.T) {
+			sharedPG.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
+			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/999999?lang=ja", nil)
+			w := httptest.NewRecorder()
+			newAnnouncementEngine(h).ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusNotFound, w.Code)
+		})
 	})
 }

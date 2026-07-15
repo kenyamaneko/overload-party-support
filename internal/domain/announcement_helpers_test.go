@@ -11,7 +11,7 @@ import (
 
 func TestDeriveState(t *testing.T) {
 	// 判定順序が state の排他性を担保する。特に PublishedAt が NULL の record は ExpiresAt の値に依存せず Draft になる。
-	t.Run("state の導出", func(t *testing.T) {
+	t.Run("公開状態の導出", func(t *testing.T) {
 		now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 		past := now.Add(-time.Hour)
 		future := now.Add(time.Hour)
@@ -56,6 +56,18 @@ func TestDeriveState(t *testing.T) {
 				name:        "PublishedAt<=now で ExpiresAt が過去のとき、Expired になる",
 				publishedAt: &past,
 				expiresAt:   &past,
+				want:        domain.StateExpired,
+			},
+			{
+				name:        "公開時刻が現在時刻と等しいとき、予約公開にならず公開中になる",
+				publishedAt: &now,
+				expiresAt:   nil,
+				want:        domain.StatePublished,
+			},
+			{
+				name:        "失効時刻が現在時刻と等しいとき、公開中にならず期限切れになる",
+				publishedAt: &past,
+				expiresAt:   &now,
 				want:        domain.StateExpired,
 			},
 		}

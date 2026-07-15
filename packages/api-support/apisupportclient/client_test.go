@@ -13,12 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// StatusMapping 群は、SDK の固有責務である「OpenAPI spec で宣言された 4xx/5xx status を
-// sentinel error に変換する」契約を endpoint ごとに検証する。各テストは data/openapi.yaml が
-// 宣言する error status を網羅する。
-
-func TestClient_ListAnnouncements_StatusMapping(t *testing.T) {
-	t.Run("ListAnnouncements のステータスマッピング", func(t *testing.T) {
+func TestClient_ListAnnouncements(t *testing.T) {
+	t.Run("ListAnnouncements", func(t *testing.T) {
 		t.Run("400 を受けたとき、ErrBadRequest になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
@@ -28,11 +24,21 @@ func TestClient_ListAnnouncements_StatusMapping(t *testing.T) {
 			_, err := c.ListAnnouncements(context.Background(), "ja")
 			assertSentinel(t, err, apisupportclient.ErrBadRequest)
 		})
+
+		t.Run("401 を受けたとき、ErrUnauthorized になる", func(t *testing.T) {
+			srv := apisupportserverfake.NewServer()
+			defer srv.Close()
+			srv.ListAnnouncementsFn = func(_ string) (int, any) { return http.StatusUnauthorized, nil }
+
+			c := newTestClient(t, srv.URL())
+			_, err := c.ListAnnouncements(context.Background(), "ja")
+			assertSentinel(t, err, apisupportclient.ErrUnauthorized)
+		})
 	})
 }
 
-func TestClient_GetAnnouncement_StatusMapping(t *testing.T) {
-	t.Run("GetAnnouncement のステータスマッピング", func(t *testing.T) {
+func TestClient_GetAnnouncement(t *testing.T) {
+	t.Run("GetAnnouncement", func(t *testing.T) {
 		cases := []struct {
 			name       string
 			status     int
@@ -47,6 +53,11 @@ func TestClient_GetAnnouncement_StatusMapping(t *testing.T) {
 				name:       "404 を受けたとき、ErrNotFound になる",
 				status:     http.StatusNotFound,
 				wantTarget: apisupportclient.ErrNotFound,
+			},
+			{
+				name:       "500 を受けたとき、ErrInternalServer になる",
+				status:     http.StatusInternalServerError,
+				wantTarget: apisupportclient.ErrInternalServer,
 			},
 		}
 		for _, tc := range cases {
@@ -63,25 +74,38 @@ func TestClient_GetAnnouncement_StatusMapping(t *testing.T) {
 	})
 }
 
-func TestClient_SubmitInquiry_StatusMapping(t *testing.T) {
-	t.Run("SubmitInquiry のステータスマッピング", func(t *testing.T) {
+func TestClient_SubmitInquiry(t *testing.T) {
+	t.Run("SubmitInquiry", func(t *testing.T) {
 		t.Run("400 を受けたとき、ErrBadRequest になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusBadRequest, nil }
 
 			c := newTestClient(t, srv.URL())
-			// status mapping 検証のため request body の内容は無関係 (server fake は body を見ず status を返す)。
 			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
 			assertSentinel(t, err, apisupportclient.ErrBadRequest)
+		})
+
+		t.Run("仕様に無い status (418) を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
+			srv := apisupportserverfake.NewServer()
+			defer srv.Close()
+			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusTeapot, nil }
+
+			c := newTestClient(t, srv.URL())
+			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
+
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, apisupportclient.ErrBadRequest)
+			assert.NotErrorIs(t, err, apisupportclient.ErrUnauthorized)
+			assert.NotErrorIs(t, err, apisupportclient.ErrNotFound)
+			assert.NotErrorIs(t, err, apisupportclient.ErrInternalServer)
 		})
 	})
 }
 
 func TestClient_RequestEditor(t *testing.T) {
 	t.Run("リクエストエディタの適用", func(t *testing.T) {
-		t.Run("WithRequestEditorFn で渡した editor が全リクエストに適用される", func(t *testing.T) {
-			// header 注入の接続点として SDK が機能することを担保する。
+		t.Run("設定したヘッダが送信先の全リクエストに付与される", func(t *testing.T) {
 			var gotHeader string
 			spy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotHeader = r.Header.Get("X-Custom-Header")

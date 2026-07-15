@@ -51,6 +51,18 @@ jobs:
         with:
           json-path: go-test-unit.json
           title: 単体テスト結果
+      # packages/api-support は別 go.mod (公開 SDK モジュール) のためルートの
+      # `go test ./...` には含まれず、明示的に走らせる。
+      - name: Run api-support unit tests
+        working-directory: packages/api-support
+        run: go test -race -count=1 ./... -json | tee go-test-unit.json
+      - name: Report api-support test results
+        if: ${{ !cancelled() }}
+        uses: kenyamaneko/overload-party-common/.github/actions/go-test-report@main
+        with:
+          json-path: packages/api-support/go-test-unit.json
+          title: api-support 単体テスト結果
+          module-dir: packages/api-support
 
   image-scan:
     runs-on: ubicloud-standard-2
