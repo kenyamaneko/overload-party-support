@@ -86,7 +86,7 @@ func TestClient_SubmitInquiry(t *testing.T) {
 			assertSentinel(t, err, apisupportclient.ErrBadRequest)
 		})
 
-		t.Run("写像外の status (418) を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
+		t.Run("仕様に無い status (418) を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusTeapot, nil }
