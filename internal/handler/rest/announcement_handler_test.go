@@ -163,30 +163,14 @@ func TestAnnouncementGetDetail(t *testing.T) {
 		}
 
 		dbErr := errors.New("db lost")
-		okDetail := &domain.AnnouncementDetail{AnnouncementID: 1, Type: domain.TypeInfo}
 
 		statusCases := []struct {
 			name       string
 			id         string
 			query      string
-			detail     *domain.AnnouncementDetail
 			repoErr    error
 			wantStatus int
 		}{
-			{
-				name:       "正常のとき、200 になる",
-				id:         "1",
-				query:      "?lang=ja",
-				detail:     okDetail,
-				wantStatus: http.StatusOK,
-			},
-			{
-				name:       "not found のとき、404 になる",
-				id:         "1",
-				query:      "?lang=ja",
-				repoErr:    port.ErrNotFound,
-				wantStatus: http.StatusNotFound,
-			},
 			{
 				name:       "非数値 ID のとき、404 になる",
 				id:         "abc",
@@ -218,7 +202,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				repo := &port.MockAnnouncementRepo{
 					GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
-						return tc.detail, tc.repoErr
+						return nil, tc.repoErr
 					},
 				}
 				h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))

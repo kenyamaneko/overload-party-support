@@ -96,8 +96,6 @@ func TestFromEnv(t *testing.T) {
 		}
 
 		// 欠落・不正な env はデフォルト値へフォールバックせず即エラーにする。
-		// wantErrContains で不変条件ごとにエラー原因を識別し、無関係な検証の巻き添えで
-		// 緑にならないようにする。
 		invalidCases := []struct {
 			name            string
 			base            func() map[string]string
