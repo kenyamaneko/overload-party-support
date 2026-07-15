@@ -15,9 +15,6 @@ import (
 func TestServer(t *testing.T) {
 	t.Run("サーバフェイク", func(t *testing.T) {
 		t.Run("GetAnnouncement は Fn 未設定のとき、404 になる", func(t *testing.T) {
-			// consumer (client SDK) が依存し得る既定契約のため維持する。
-			// ListAnnouncements/SubmitInquiry の既定 200 は fake 自身の定数を
-			// 折り返すだけの echo であり、item 1 の client round-trip テストに畳んだ。
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
