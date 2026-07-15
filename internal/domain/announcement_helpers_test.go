@@ -59,13 +59,13 @@ func TestDeriveState(t *testing.T) {
 				want:        domain.StateExpired,
 			},
 			{
-				name:        "PublishedAt が now と等しいとき、Scheduled にならず Published になる",
+				name:        "公開時刻が現在時刻と等しいとき、予約公開にならず公開中になる",
 				publishedAt: &now,
 				expiresAt:   nil,
 				want:        domain.StatePublished,
 			},
 			{
-				name:        "ExpiresAt が now と等しいとき、Published にならず Expired になる",
+				name:        "失効時刻が現在時刻と等しいとき、公開中にならず期限切れになる",
 				publishedAt: &past,
 				expiresAt:   &now,
 				want:        domain.StateExpired,

@@ -288,17 +288,17 @@ func TestList(t *testing.T) {
 				wantTitles: []string{"draft", "draft with past expires"},
 			},
 			{
-				name:       "state=Scheduled のとき、PublishedAt > now の 1 件を返す (PublishedAt==now は含まない)",
+				name:       "state=Scheduled のとき、公開時刻が現在時刻より未来の 1 件を返す (公開時刻が現在時刻と等しい行は含まない)",
 				state:      &scheduled,
 				wantTitles: []string{"scheduled"},
 			},
 			{
-				name:       "state=Published のとき、公開時刻到達済みかつ未失効の行を返す (PublishedAt==now を含み、ExpiresAt==now は含まない)",
+				name:       "state=Published のとき、公開時刻到達済みかつ未失効の行を返す (公開時刻が現在時刻と等しい行を含み、失効時刻が現在時刻と等しい行は含まない)",
 				state:      &published,
 				wantTitles: []string{"published", "published_at==now"},
 			},
 			{
-				name:       "state=Expired のとき、PublishedAt が過去かつ ExpiresAt が過去以下の行を返す (ExpiresAt==now を含む、Draft 系は含まない)",
+				name:       "state=Expired のとき、公開時刻が過去かつ失効時刻が過去以下の行を返す (失効時刻が現在時刻と等しい行を含む、下書き系は含まない)",
 				state:      &expired,
 				wantTitles: []string{"expired", "expires_at==now"},
 			},
