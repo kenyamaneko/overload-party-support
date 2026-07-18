@@ -259,6 +259,12 @@ func TestSubmit(t *testing.T) {
 					snippetLen:  50,
 					wantSnippet: strings.Repeat("あ", 50),
 				},
+				{
+					name:        "切り詰め位置が空白に当たるとき、末尾の空白を除いた抜粋が Slack 通知に渡される",
+					body:        "abcd efgh",
+					snippetLen:  5,
+					wantSnippet: "abcd",
+				},
 			}
 
 			for _, tc := range cases {

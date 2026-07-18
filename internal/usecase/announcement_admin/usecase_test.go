@@ -398,6 +398,13 @@ func TestUpsertTranslation(t *testing.T) {
 				body:    "",
 				wantErr: announcementadmin.ErrInvalidField,
 			},
+			{
+				name:    "title が上限超過 (201 文字) のとき、ErrInvalidField になる",
+				lang:    domain.LangJa,
+				title:   strings.Repeat("あ", 201),
+				body:    "B",
+				wantErr: announcementadmin.ErrInvalidField,
+			},
 		}
 
 		for _, tc := range validationCases {
@@ -407,6 +414,17 @@ func TestUpsertTranslation(t *testing.T) {
 				assert.ErrorIs(t, err, tc.wantErr)
 			})
 		}
+
+		t.Run("title が上限ちょうど (200 文字) のとき、登録できる", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				UpsertTranslationFn: func(_ context.Context, _ int64, _, _, _ string) error {
+					return nil
+				},
+			}
+			err := announcementadmin.New(repo, nowFixed).UpsertTranslation(context.Background(), 1, domain.LangJa, strings.Repeat("あ", 200), "B")
+
+			require.NoError(t, err)
+		})
 
 		t.Run("告知が見つからないとき、ErrNotFound になる", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
