@@ -319,6 +319,16 @@ func TestList(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("告知が 1 件も無いとき、nil でなく長さ 0 の一覧が返る", func(t *testing.T) {
+		repo := newAnnouncementRepo(t)
+		ctx := context.Background()
+
+		items, err := repo.List(ctx, nil, fixedNow)
+		require.NoError(t, err)
+		assert.NotNil(t, items)
+		assert.Empty(t, items)
+	})
 }
 
 func TestGetPublishedDetail(t *testing.T) {

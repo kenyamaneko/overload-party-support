@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -102,10 +103,15 @@ const (
 
 func TestCreateRoute(t *testing.T) {
 	t.Run("告知の作成", func(t *testing.T) {
+		wantPublished := time.Date(2026, 4, 20, 9, 30, 0, 0, time.UTC)
+		wantExpires := time.Date(2026, 5, 20, 9, 30, 0, 0, time.UTC)
+
 		successCases := []struct {
 			name             string
 			form             url.Values
 			wantTranslations []domain.TranslationInput
+			wantPublishedAt  *time.Time
+			wantExpiresAt    *time.Time
 		}{
 			{
 				name: "en が両方空のとき、ja 翻訳のみで作成され 303 でリダイレクトする",
@@ -121,6 +127,22 @@ func TestCreateRoute(t *testing.T) {
 					{Lang: domain.LangJa, Title: "題", Body: "本文"},
 					{Lang: domain.LangEn, Title: "T", Body: "B"},
 				},
+			},
+			{
+				name: "公開開始を空で作成すると、公開開始なし (下書き) として保存される",
+				form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "published_at": {""}},
+				wantTranslations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "題", Body: "本文"},
+				},
+			},
+			{
+				name: "公開開始と公開終了を指定して作成すると、その UTC 時刻で保存される",
+				form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "published_at": {"2026-04-20T09:30"}, "expires_at": {"2026-05-20T09:30"}},
+				wantTranslations: []domain.TranslationInput{
+					{Lang: domain.LangJa, Title: "題", Body: "本文"},
+				},
+				wantPublishedAt: &wantPublished,
+				wantExpiresAt:   &wantExpires,
 			},
 		}
 
@@ -142,6 +164,8 @@ func TestCreateRoute(t *testing.T) {
 				assert.Equal(t, http.StatusSeeOther, w.Code)
 				assert.Equal(t, fmt.Sprintf("/admin/announcements/%d", createdAnnouncementID), w.Header().Get("Location"))
 				assert.Equal(t, tc.wantTranslations, gotParams.Translations)
+				assert.Equal(t, tc.wantPublishedAt, gotParams.PublishedAt)
+				assert.Equal(t, tc.wantExpiresAt, gotParams.ExpiresAt)
 			})
 		}
 
@@ -156,6 +180,14 @@ func TestCreateRoute(t *testing.T) {
 			{
 				name: "en body のみのとき、400 になる",
 				form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "en_body": {"B"}},
+			},
+			{
+				name: "公開開始の形式が不正 (2026/04/20 09:30) のとき、400 になり保存されない",
+				form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "published_at": {"2026/04/20 09:30"}},
+			},
+			{
+				name: "公開終了の形式が不正 (2026-04-20) のとき、400 になり保存されない",
+				form: url.Values{"type": {domain.TypeInfo}, "ja_title": {"題"}, "ja_body": {"本文"}, "expires_at": {"2026-04-20"}},
 			},
 		}
 
@@ -211,6 +243,103 @@ func TestListRoute(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Contains(t, w.Body.String(), announcementadmin.ErrInvalidStatusFilter.Error())
 		})
+
+		t.Run("一覧の取得で想定外のエラーが起きたとき、500 になる", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return nil, errors.New("db lost")
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+		})
+
+		t.Run("ja 翻訳の無い告知が一覧に含まれるとき、500 になる", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return []domain.AnnouncementWithTranslations{
+						{
+							Announcement: domain.Announcement{AnnouncementID: 9, Type: domain.TypeInfo},
+							Translations: []domain.Translation{{Lang: domain.LangEn, Title: "en only", Body: "b"}},
+						},
+					}, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+		})
+
+		t.Run("公開中と下書きの告知があるとき、state 列に published と draft が表示される", func(t *testing.T) {
+			published := fixedAdminNow.Add(-time.Hour)
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return []domain.AnnouncementWithTranslations{
+						{
+							Announcement: domain.Announcement{AnnouncementID: 1, Type: domain.TypeInfo, PublishedAt: &published},
+							Translations: []domain.Translation{{Lang: domain.LangJa, Title: "公開中の題", Body: "b"}},
+						},
+						{
+							Announcement: domain.Announcement{AnnouncementID: 2, Type: domain.TypeInfo},
+							Translations: []domain.Translation{{Lang: domain.LangJa, Title: "下書きの題", Body: "b"}},
+						},
+					}, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "<code>published</code>")
+			assert.Contains(t, w.Body.String(), "<code>draft</code>")
+		})
+
+		t.Run("ja と en の翻訳がある告知は、翻訳列に ja, en と表示される", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return []domain.AnnouncementWithTranslations{
+						{
+							Announcement: domain.Announcement{AnnouncementID: 3, Type: domain.TypeInfo},
+							Translations: []domain.Translation{
+								{Lang: domain.LangJa, Title: "題", Body: "b"},
+								{Lang: domain.LangEn, Title: "title", Body: "b"},
+							},
+						},
+					}, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "ja, en")
+		})
+
+		t.Run("告知が 0 件のとき、「該当するお知らせがありません。」と表示される", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return []domain.AnnouncementWithTranslations{}, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "該当するお知らせがありません。")
+		})
 	})
 }
 
@@ -248,6 +377,68 @@ func TestShowEditRoute(t *testing.T) {
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
+		})
+
+		t.Run("公開開始が設定済みで公開終了が未設定のとき、公開開始欄にその日時・公開終了欄は空で表示される", func(t *testing.T) {
+			published := time.Date(2026, 4, 20, 9, 30, 0, 0, time.UTC)
+			existing := &domain.AnnouncementWithTranslations{
+				Announcement: domain.Announcement{AnnouncementID: targetAnnouncementID, Type: domain.TypeInfo, PublishedAt: &published},
+				Translations: []domain.Translation{{Lang: domain.LangJa, Title: "題", Body: "本文"}},
+			}
+			repo := &port.MockAnnouncementRepo{
+				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+					return existing, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), `name="published_at" value="2026-04-20T09:30"`)
+			assert.Contains(t, w.Body.String(), `name="expires_at" value=""`)
+		})
+
+		t.Run("en 翻訳が未作成のとき、en の欄に 未作成 と表示される", func(t *testing.T) {
+			existing := &domain.AnnouncementWithTranslations{
+				Announcement: domain.Announcement{AnnouncementID: targetAnnouncementID, Type: domain.TypeInfo},
+				Translations: []domain.Translation{{Lang: domain.LangJa, Title: "題", Body: "本文"}},
+			}
+			repo := &port.MockAnnouncementRepo{
+				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+					return existing, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "未作成")
+		})
+
+		t.Run("en 翻訳があるとき、そのタイトルが入力欄に表示される", func(t *testing.T) {
+			existing := &domain.AnnouncementWithTranslations{
+				Announcement: domain.Announcement{AnnouncementID: targetAnnouncementID, Type: domain.TypeInfo},
+				Translations: []domain.Translation{
+					{Lang: domain.LangJa, Title: "題", Body: "本文"},
+					{Lang: domain.LangEn, Title: "en 翻訳表示確認用タイトル", Body: "body"},
+				},
+			}
+			repo := &port.MockAnnouncementRepo{
+				GetWithTranslationsFn: func(_ context.Context, _ int64) (*domain.AnnouncementWithTranslations, error) {
+					return existing, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "en 翻訳表示確認用タイトル")
 		})
 	})
 }
@@ -297,6 +488,35 @@ func TestUpdateRoute(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
 		})
+
+		t.Run("公開開始を指定して更新すると、その UTC 時刻で保存される", func(t *testing.T) {
+			var gotParams domain.UpdateAnnouncementParams
+			repo := &port.MockAnnouncementRepo{
+				UpdateFn: func(_ context.Context, _ int64, params domain.UpdateAnnouncementParams) error {
+					gotParams = params
+					return nil
+				},
+			}
+			form := url.Values{"type": {domain.TypeInfo}, "published_at": {"2026-04-21T00:00"}}
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusSeeOther, w.Code)
+			want := time.Date(2026, 4, 21, 0, 0, 0, 0, time.UTC)
+			assert.Equal(t, &want, gotParams.PublishedAt)
+		})
+
+		t.Run("種別に未知の値 (nope) を指定して更新すると、400 になる", func(t *testing.T) {
+			form := url.Values{"type": {"nope"}}
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d", targetAnnouncementID), strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			newAdminEngine(t, &port.MockAnnouncementRepo{}).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
 	})
 }
 
@@ -344,6 +564,16 @@ func TestUpsertTranslationRoute(t *testing.T) {
 
 			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.Contains(t, w.Body.String(), announcementadmin.ErrNotFound.Error())
+		})
+
+		t.Run("対応外の言語 (fr) へ翻訳を登録すると、400 になる", func(t *testing.T) {
+			form := url.Values{"title": {"題"}, "body": {"本文"}}
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/announcements/%d/translations/fr", targetAnnouncementID), strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			newAdminEngine(t, &port.MockAnnouncementRepo{}).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
 		})
 	})
 }

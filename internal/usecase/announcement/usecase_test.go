@@ -39,6 +39,18 @@ func TestList(t *testing.T) {
 			assert.Equal(t, fixedNow, gotNow)
 		})
 
+		t.Run("一覧の取得元が想定外のエラーを返すとき、握りつぶさずそのまま透過される", func(t *testing.T) {
+			dbErr := errors.New("db lost")
+			repo := &port.MockAnnouncementRepo{
+				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
+					return nil, dbErr
+				},
+			}
+			_, err := announcement.New(repo, nowFixed).List(context.Background(), domain.LangJa)
+
+			assert.ErrorIs(t, err, dbErr)
+		})
+
 		langCases := []struct {
 			name    string
 			lang    string
