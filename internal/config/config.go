@@ -29,6 +29,12 @@ type Config struct {
 	// PostgreSQL 接続文字列 (pgx 形式)。
 	DatabaseConn string
 
+	// Cloud SQL への接続認証方式を切り替えるフラグ。
+	DatabaseIAMAuthEnabled bool
+
+	// IAM データベース認証を使うときのみ必須。
+	CloudSQLConnectionName string
+
 	// 外部フォーム用 CORS 許可オリジン。
 	CORSAllowedOrigins []string
 
@@ -71,6 +77,18 @@ func FromEnv() (*Config, error) {
 	databaseConn, err := getRequiredString("DATABASE_CONN")
 	if err != nil {
 		return nil, err
+	}
+
+	databaseIAMAuthEnabled, err := getRequiredBool("DATABASE_IAM_AUTH_ENABLED")
+	if err != nil {
+		return nil, err
+	}
+	var cloudSQLConnectionName string
+	if databaseIAMAuthEnabled {
+		cloudSQLConnectionName = os.Getenv("CLOUDSQL_CONNECTION_NAME")
+		if cloudSQLConnectionName == "" {
+			return nil, fmt.Errorf("CLOUDSQL_CONNECTION_NAME is required when DATABASE_IAM_AUTH_ENABLED=true")
+		}
 	}
 
 	originsRaw, err := getRequiredString("CORS_ALLOWED_ORIGINS")
@@ -123,6 +141,8 @@ func FromEnv() (*Config, error) {
 		AdminPort:                adminPort,
 		ExternalPort:             externalPort,
 		DatabaseConn:             databaseConn,
+		DatabaseIAMAuthEnabled:   databaseIAMAuthEnabled,
+		CloudSQLConnectionName:   cloudSQLConnectionName,
 		CORSAllowedOrigins:       origins,
 		InquiryBodySnippetLength: snippetLen,
 		SendGridFromAddress:      fromAddr,
@@ -161,6 +181,19 @@ func getRequiredString(name string) (string, error) {
 		return "", fmt.Errorf("%s is required", name)
 	}
 	return v, nil
+}
+
+// getRequiredBool は必須の真偽 env を取得する。"true" / "false" 以外はエラー。
+func getRequiredBool(name string) (bool, error) {
+	v := os.Getenv(name)
+	switch v {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s must be %q or %q, got %q", name, "true", "false", v)
+	}
 }
 
 // getRequiredInt は必須の整数 env を取得する。未設定 / 非整数ならエラー。

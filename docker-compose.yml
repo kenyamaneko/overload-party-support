@@ -39,6 +39,7 @@ services:
       ADMIN_PORT: "9109"
       EXTERNAL_PORT: "9209"
       DATABASE_CONN: host=postgres port=5432 dbname=support user=support password=support sslmode=disable
+      DATABASE_IAM_AUTH_ENABLED: "false"
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       INQUIRY_BODY_SNIPPET_LENGTH: "200"
       SENDGRID_FROM_ADDRESS: support@example.com

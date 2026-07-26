@@ -16,6 +16,8 @@ var envKeys = []string{
 	"ADMIN_PORT",
 	"EXTERNAL_PORT",
 	"DATABASE_CONN",
+	"DATABASE_IAM_AUTH_ENABLED",
+	"CLOUDSQL_CONNECTION_NAME",
 	"CORS_ALLOWED_ORIGINS",
 	"INQUIRY_BODY_SNIPPET_LENGTH",
 	"SENDGRID_FROM_ADDRESS",
@@ -33,6 +35,7 @@ func validLocalEnv() map[string]string {
 		"ADMIN_PORT":                  "9109",
 		"EXTERNAL_PORT":               "9209",
 		"DATABASE_CONN":               "host=localhost dbname=support",
+		"DATABASE_IAM_AUTH_ENABLED":   "false",
 		"CORS_ALLOWED_ORIGINS":        "http://localhost:3000",
 		"INQUIRY_BODY_SNIPPET_LENGTH": "200",
 		"SENDGRID_FROM_ADDRESS":       "support@example.com",
@@ -163,6 +166,26 @@ func TestFromEnv(t *testing.T) {
 				wantErrContains: "DATABASE_CONN is required",
 			},
 			{
+				name:            "DATABASE_IAM_AUTH_ENABLED が欠けるとき、エラーになる",
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { delete(m, "DATABASE_IAM_AUTH_ENABLED") },
+				wantErrContains: "DATABASE_IAM_AUTH_ENABLED must be",
+			},
+			{
+				name:            `DATABASE_IAM_AUTH_ENABLED が "true"/"false" 以外の "yes" のとき、エラーになる`,
+				base:            validLocalEnv,
+				mutate:          func(m map[string]string) { m["DATABASE_IAM_AUTH_ENABLED"] = "yes" },
+				wantErrContains: "DATABASE_IAM_AUTH_ENABLED must be",
+			},
+			{
+				name: "DATABASE_IAM_AUTH_ENABLED が true かつ CLOUDSQL_CONNECTION_NAME が未設定のとき、エラーになる",
+				base: validLocalEnv,
+				mutate: func(m map[string]string) {
+					m["DATABASE_IAM_AUTH_ENABLED"] = "true"
+				},
+				wantErrContains: "CLOUDSQL_CONNECTION_NAME is required",
+			},
+			{
 				name:            "CORS_ALLOWED_ORIGINS が欠けるとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { delete(m, "CORS_ALLOWED_ORIGINS") },
@@ -263,6 +286,8 @@ func TestFromEnv(t *testing.T) {
 			assert.Equal(t, 12346, cfg.AdminPort)
 			assert.Equal(t, 12347, cfg.ExternalPort)
 			assert.Equal(t, m["DATABASE_CONN"], cfg.DatabaseConn)
+			assert.False(t, cfg.DatabaseIAMAuthEnabled)
+			assert.Empty(t, cfg.CloudSQLConnectionName)
 			assert.Equal(t, []string{"https://a.example.com", "https://b.example.com"}, cfg.CORSAllowedOrigins)
 			assert.Equal(t, 150, cfg.InquiryBodySnippetLength)
 			assert.Equal(t, m["SENDGRID_FROM_ADDRESS"], cfg.SendGridFromAddress)
@@ -270,6 +295,19 @@ func TestFromEnv(t *testing.T) {
 			assert.Equal(t, m["SLACK_BOT_TOKEN"], cfg.SlackBotToken)
 			assert.Equal(t, m["SLACK_CHANNEL_ID"], cfg.SlackChannelID)
 			assert.Equal(t, m["SENDGRID_API_KEY"], cfg.SendGridAPIKey)
+		})
+
+		t.Run("DATABASE_IAM_AUTH_ENABLED が true のとき、CLOUDSQL_CONNECTION_NAME が Config に反映される", func(t *testing.T) {
+			m := validLocalEnv()
+			m["DATABASE_IAM_AUTH_ENABLED"] = "true"
+			m["CLOUDSQL_CONNECTION_NAME"] = "overload-party-dev:asia-northeast1:overload-party-db"
+			applyEnv(t, m)
+
+			cfg, err := config.FromEnv()
+
+			require.NoError(t, err)
+			assert.True(t, cfg.DatabaseIAMAuthEnabled)
+			assert.Equal(t, m["CLOUDSQL_CONNECTION_NAME"], cfg.CloudSQLConnectionName)
 		})
 	})
 }
