@@ -55,19 +55,16 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_announcements_touch_updated_at ON support.announcements;
 CREATE TRIGGER trg_announcements_touch_updated_at
     BEFORE UPDATE ON support.announcements
     FOR EACH ROW
     EXECUTE FUNCTION support.touch_updated_at();
 
-DROP TRIGGER IF EXISTS trg_announcement_translations_touch_updated_at ON support.announcement_translations;
 CREATE TRIGGER trg_announcement_translations_touch_updated_at
     BEFORE UPDATE ON support.announcement_translations
     FOR EACH ROW
     EXECUTE FUNCTION support.touch_updated_at();
 
-DROP TRIGGER IF EXISTS trg_inquiries_touch_updated_at ON support.inquiries;
 CREATE TRIGGER trg_inquiries_touch_updated_at
     BEFORE UPDATE ON support.inquiries
     FOR EACH ROW
