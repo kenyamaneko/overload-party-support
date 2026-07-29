@@ -343,7 +343,8 @@ func TestListRoute(t *testing.T) {
 			newAdminEngine(t, repo).ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusOK, w.Code)
-			assert.Contains(t, w.Body.String(), "<small>ja</small>")
+			assert.Contains(t, w.Body.String(), "ja")
+			assert.NotContains(t, w.Body.String(), "ja, en")
 		})
 
 		t.Run("告知が 0 件のとき、「該当するお知らせがありません。」と表示される", func(t *testing.T) {
