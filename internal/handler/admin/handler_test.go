@@ -326,6 +326,26 @@ func TestListRoute(t *testing.T) {
 			assert.Contains(t, w.Body.String(), "ja, en")
 		})
 
+		t.Run("ja のみ翻訳がある告知は、翻訳列に ja とだけ表示される", func(t *testing.T) {
+			repo := &port.MockAnnouncementRepo{
+				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
+					return []domain.AnnouncementWithTranslations{
+						{
+							Announcement: domain.Announcement{AnnouncementID: 4, Type: domain.TypeInfo},
+							Translations: []domain.Translation{{Lang: domain.LangJa, Title: "題", Body: "b"}},
+						},
+					}, nil
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/admin/announcements", nil)
+			w := httptest.NewRecorder()
+			newAdminEngine(t, repo).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Contains(t, w.Body.String(), "<small>ja</small>")
+		})
+
 		t.Run("告知が 0 件のとき、「該当するお知らせがありません。」と表示される", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				ListFn: func(_ context.Context, _ *string, _ time.Time) ([]domain.AnnouncementWithTranslations, error) {
@@ -627,61 +647,5 @@ func TestDeleteRoute(t *testing.T) {
 			assert.Empty(t, w.Body.String())
 			assert.Equal(t, deletedAnnouncementID, gotDeletedID)
 		})
-	})
-}
-
-func TestToAdminListItem(t *testing.T) {
-	t.Run("一覧ビューモデルへの変換", func(t *testing.T) {
-		now := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
-		past := now.Add(-time.Hour)
-		cases := []struct {
-			name           string
-			translations   []domain.Translation
-			publishedAt    *time.Time
-			wantJaTitle    string
-			wantLangsLabel string
-			wantState      string
-			wantErr        bool
-		}{
-			{
-				name: "ja と en の翻訳があるとき、ja タイトルと ja, en ラベルになる",
-				translations: []domain.Translation{
-					{Lang: domain.LangJa, Title: "日本語題"},
-					{Lang: domain.LangEn, Title: "English"},
-				},
-				publishedAt:    &past,
-				wantJaTitle:    "日本語題",
-				wantLangsLabel: "ja, en",
-				wantState:      domain.StatePublished,
-			},
-			{
-				name:           "ja のみのとき、ja タイトルと ja ラベルになる",
-				translations:   []domain.Translation{{Lang: domain.LangJa, Title: "日本語題"}},
-				publishedAt:    nil,
-				wantJaTitle:    "日本語題",
-				wantLangsLabel: "ja",
-				wantState:      domain.StateDraft,
-			},
-			{
-				name:         "ja 翻訳が欠落するとき、エラーになる",
-				translations: []domain.Translation{{Lang: domain.LangEn, Title: "English"}},
-				publishedAt:  &past,
-				wantErr:      true,
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				got, err := toAdminListItem(domain.AnnouncementWithTranslations{
-					Announcement: domain.Announcement{PublishedAt: tc.publishedAt},
-					Translations: tc.translations,
-				}, now)
-
-				assert.Equal(t, tc.wantErr, err != nil)
-				assert.Equal(t, tc.wantJaTitle, got.JaTitle)
-				assert.Equal(t, tc.wantLangsLabel, got.LangsLabel)
-				assert.Equal(t, tc.wantState, got.State)
-			})
-		}
 	})
 }

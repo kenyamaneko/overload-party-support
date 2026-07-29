@@ -42,7 +42,7 @@ func TestClient_ListAnnouncements(t *testing.T) {
 
 			c := newTestClient(t, srv.URL())
 			_, err := c.ListAnnouncements(context.Background(), "ja")
-			assert.ErrorContains(t, err, "ListAnnouncements")
+			assert.ErrorContains(t, err, "apisupportclient: ListAnnouncements:")
 		})
 	})
 }
@@ -89,7 +89,7 @@ func TestClient_GetAnnouncement(t *testing.T) {
 
 			c := newTestClient(t, srv.URL())
 			_, err := c.GetAnnouncement(context.Background(), 1, "ja")
-			assert.ErrorContains(t, err, "GetAnnouncement")
+			assert.ErrorContains(t, err, "apisupportclient: GetAnnouncement:")
 		})
 	})
 }
@@ -113,7 +113,7 @@ func TestClient_SubmitInquiry(t *testing.T) {
 
 			c := newTestClient(t, srv.URL())
 			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
-			assert.ErrorContains(t, err, "SubmitInquiry")
+			assert.ErrorContains(t, err, "apisupportclient: SubmitInquiry:")
 		})
 
 		t.Run("仕様に無い status (418) を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
