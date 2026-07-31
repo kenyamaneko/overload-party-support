@@ -1,9 +1,11 @@
 name: CI
 
 # PR の品質ゲート。ブランチ保護の required status check として使う。
+# main への push では test-catalog.yaml から呼ばれ、テスト観点カタログの元になる。
 on:
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -55,14 +57,23 @@ jobs:
       # `go test ./...` には含まれず、明示的に走らせる。
       - name: Run api-support unit tests
         working-directory: packages/api-support
-        run: go test -race -count=1 ./... -json | tee go-test-unit.json
+        run: go test -race -count=1 ./... -json | tee ../../go-test-unit-api-support.json
       - name: Report api-support test results
         if: ${{ !cancelled() }}
         uses: kenyamaneko/overload-party-common/.github/actions/go-test-report@main
         with:
-          json-path: packages/api-support/go-test-unit.json
+          json-path: go-test-unit-api-support.json
           title: api-support 単体テスト結果
           module-dir: packages/api-support
+      # 同一 run 内でテスト観点カタログを組むためだけに使うので保持は最短にする
+      - name: Upload unit test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-test-unit
+          path: |
+            go-test-unit.json
+            go-test-unit-api-support.json
+          retention-days: 1
 
   image-scan:
     runs-on: ubicloud-standard-2
