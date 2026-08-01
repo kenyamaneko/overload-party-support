@@ -62,7 +62,7 @@ jobs:
           sections: |
             外から見た振る舞い:サービス:go-json:go-test-unit.json:github.com/kenyamaneko/overload-party-support/internal/handler/
             内部の挙動:サービス:go-json:go-test-unit.json:github.com/kenyamaneko/overload-party-support/internal/adapter/,github.com/kenyamaneko/overload-party-support/internal/config,github.com/kenyamaneko/overload-party-support/internal/domain,github.com/kenyamaneko/overload-party-support/internal/repository/,github.com/kenyamaneko/overload-party-support/internal/usecase/
-            外から見た振る舞い:API パッケージ:go-json:go-test-unit-api-support.json
+            外から見た振る舞い:API パッケージ:go-json:go-test-unit-extra.json
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
