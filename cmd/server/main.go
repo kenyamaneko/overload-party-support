@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,20 +15,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kenyamaneko/overload-party-support/internal/adapter/sendgrid"
-	"github.com/kenyamaneko/overload-party-support/internal/adapter/sendgrid/sendgridnoop"
-	"github.com/kenyamaneko/overload-party-support/internal/adapter/slack"
-	"github.com/kenyamaneko/overload-party-support/internal/adapter/slack/slacknoop"
 	"github.com/kenyamaneko/overload-party-support/internal/config"
-	"github.com/kenyamaneko/overload-party-support/internal/handler/admin"
-	"github.com/kenyamaneko/overload-party-support/internal/handler/external"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
-	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
 	"github.com/kenyamaneko/overload-party-support/internal/router"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
-	announcementadmin "github.com/kenyamaneko/overload-party-support/internal/usecase/announcement_admin"
-	"github.com/kenyamaneko/overload-party-support/internal/usecase/inquiry"
 )
 
 func main() {
@@ -56,65 +49,27 @@ func run() error {
 	defer pool.Close()
 
 	announcementRepo := postgres.NewAnnouncementRepository(pool)
-	inquiryRepo := postgres.NewInquiryRepository(pool)
-
-	slackNotifier := pickSlackNotifier(cfg)
-	emailSender, err := pickEmailSender(cfg)
-	if err != nil {
-		return fmt.Errorf("build email sender: %w", err)
-	}
 
 	announcementUsecase := announcement.New(announcementRepo, time.Now)
-	announcementAdminUsecase := announcementadmin.New(announcementRepo, time.Now)
-	inquiryUsecase := inquiry.New(inquiryRepo, slackNotifier, emailSender, cfg.InquiryBodySnippetLength)
-
 	announcementH := rest.NewAnnouncementHandler(announcementUsecase)
-	externalH := external.NewInquiryHandler(inquiryUsecase)
-	adminH, err := admin.NewHandler(announcementAdminUsecase, time.Now)
-	if err != nil {
-		return fmt.Errorf("build admin handler: %w", err)
-	}
 
+	// お知らせ管理と問い合わせ受付を support の外に移したため、管理 UI と問い合わせフォームのサーバは起動しない。
 	internalSrv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.InternalPort),
 		Handler:           router.NewInternal(announcementH),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	adminSrv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.AdminPort),
-		Handler:           router.NewAdmin(cfg.Env, adminH),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	externalSrv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.ExternalPort),
-		Handler:           router.NewExternal(cfg.CORSAllowedOrigins, externalH),
-		ReadHeaderTimeout: 10 * time.Second,
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.InternalPort))
+	if err != nil {
+		return fmt.Errorf("listen internal port: %w", err)
 	}
 
 	slog.Info("listening",
-		"internal_addr", internalSrv.Addr,
-		"admin_addr", adminSrv.Addr,
-		"external_addr", externalSrv.Addr,
+		"internal_addr", ln.Addr().String(),
 		"env", cfg.Env,
 	)
 
-	return runAll(ctx, internalSrv, adminSrv, externalSrv)
-}
-
-// pickSlackNotifier は ENV に応じて real / noop を選択する。
-func pickSlackNotifier(cfg *config.Config) port.SlackNotifier {
-	if cfg.Env == config.EnvLocal {
-		return slacknoop.New()
-	}
-	return slack.NewRealNotifier(cfg.SlackBotToken, cfg.SlackChannelID)
-}
-
-// pickEmailSender は ENV に応じて real / noop を選択する。
-func pickEmailSender(cfg *config.Config) (port.EmailSender, error) {
-	if cfg.Env == config.EnvLocal {
-		return sendgridnoop.New(), nil
-	}
-	return sendgrid.NewRealSender(cfg.SendGridAPIKey, cfg.SendGridFromAddress, cfg.SendGridFromName)
+	return serve(ctx, internalSrv, ln)
 }
 
 // setupLogger は env に応じて slog のハンドラを設定する。
@@ -158,25 +113,13 @@ func newCloudLoggingHandler() slog.Handler {
 	})
 }
 
-// runAll は 3 つの HTTP server を並行起動し、いずれかの失敗・シグナルで全員を停止させる。
-func runAll(ctx context.Context, internalSrv, adminSrv, externalSrv *http.Server) error {
+// serve は ln で HTTP server を起動し、シグナルまたは ctx の終了で graceful shutdown する。
+func serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		if err := internalSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("internal http server: %w", err)
-		}
-		return nil
-	})
-	g.Go(func() error {
-		if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("admin http server: %w", err)
-		}
-		return nil
-	})
-	g.Go(func() error {
-		if err := externalSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("external http server: %w", err)
 		}
 		return nil
 	})
@@ -186,14 +129,8 @@ func runAll(ctx context.Context, internalSrv, adminSrv, externalSrv *http.Server
 		slog.Info("shutdown requested")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := internalSrv.Shutdown(shutdownCtx); err != nil {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("internal http shutdown: %w", err)
-		}
-		if err := adminSrv.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("admin http shutdown: %w", err)
-		}
-		if err := externalSrv.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("external http shutdown: %w", err)
 		}
 		return nil
 	})

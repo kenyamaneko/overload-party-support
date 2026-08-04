@@ -9,5 +9,5 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /support ./cmd/server
 FROM gcr.io/distroless/static-debian12
 WORKDIR /app
 COPY --from=builder /support /app/support
-EXPOSE 9009 9109 9209
+EXPOSE 9009
 ENTRYPOINT ["/app/support"]
