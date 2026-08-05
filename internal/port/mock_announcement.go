@@ -10,18 +10,18 @@ import (
 // MockAnnouncementRepo は AnnouncementQuerier / AnnouncementRepository を両方実装するテスト用モック。
 // 必要な Fn フィールドだけ埋めて使い、未設定のメソッド呼び出しは panic で意図しない呼び出しを検出する。
 type MockAnnouncementRepo struct {
-	ListPublishedFn      func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error)
-	GetPublishedDetailFn func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error)
-	ListFn               func(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
+	ListPublishedFn       func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error)
+	GetPublishedDetailFn  func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error)
+	ListFn                func(ctx context.Context, state *string, now time.Time) ([]domain.AnnouncementWithTranslations, error)
 	GetWithTranslationsFn func(ctx context.Context, announcementID int64) (*domain.AnnouncementWithTranslations, error)
-	CreateFn             func(ctx context.Context, params domain.CreateAnnouncementParams) (int64, error)
-	UpdateFn             func(ctx context.Context, announcementID int64, params domain.UpdateAnnouncementParams) error
-	DeleteFn             func(ctx context.Context, announcementID int64) error
-	UpsertTranslationFn  func(ctx context.Context, announcementID int64, lang, title, body string) error
+	CreateFn              func(ctx context.Context, params domain.CreateAnnouncementParams) (int64, error)
+	UpdateFn              func(ctx context.Context, announcementID int64, params domain.UpdateAnnouncementParams) error
+	DeleteFn              func(ctx context.Context, announcementID int64) error
+	UpsertTranslationFn   func(ctx context.Context, announcementID int64, lang, title, body string) error
 }
 
 var (
-	_ AnnouncementQuerier = (*MockAnnouncementRepo)(nil)
+	_ AnnouncementQuerier    = (*MockAnnouncementRepo)(nil)
 	_ AnnouncementRepository = (*MockAnnouncementRepo)(nil)
 )
 

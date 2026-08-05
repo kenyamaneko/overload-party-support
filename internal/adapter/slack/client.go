@@ -81,4 +81,3 @@ func (n *RealNotifier) postJSON(ctx context.Context, url string, payload any) er
 	}
 	return nil
 }
-

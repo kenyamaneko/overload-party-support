@@ -9,13 +9,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
+	"github.com/kenyamaneko/overload-party-support/internal/port"
 )
 
 // compile-time assertion: AnnouncementRepository が 2 つの port を満たす。
 var (
-	_ port.AnnouncementQuerier = (*AnnouncementRepository)(nil)
+	_ port.AnnouncementQuerier    = (*AnnouncementRepository)(nil)
 	_ port.AnnouncementRepository = (*AnnouncementRepository)(nil)
 )
 
