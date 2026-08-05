@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
+	"github.com/kenyamaneko/overload-party-support/internal/port"
 )
 
 var _ port.EmailSender = (*RealSender)(nil)

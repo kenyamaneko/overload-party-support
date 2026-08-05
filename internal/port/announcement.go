@@ -36,4 +36,3 @@ type AnnouncementRepository interface {
 	// UpsertTranslation は翻訳を INSERT / UPDATE する。
 	UpsertTranslation(ctx context.Context, announcementID int64, lang, title, body string) error
 }
-
