@@ -23,37 +23,37 @@ func TestDeriveState(t *testing.T) {
 			want        string
 		}{
 			{
-				name:        "PublishedAt が NULL で ExpiresAt 未設定のとき、Draft になる",
+				name:        "PublishedAtがNULLでExpiresAt未設定のとき、Draftになる",
 				publishedAt: nil,
 				expiresAt:   nil,
 				want:        domain.StateDraft,
 			},
 			{
-				name:        "PublishedAt が NULL で ExpiresAt が過去のとき、Expired にならず Draft になる",
+				name:        "PublishedAtがNULLでExpiresAtが過去のとき、ExpiredにならずDraftになる",
 				publishedAt: nil,
 				expiresAt:   &past,
 				want:        domain.StateDraft,
 			},
 			{
-				name:        "PublishedAt が now より未来のとき、Scheduled になる",
+				name:        "PublishedAtがnowより未来のとき、Scheduledになる",
 				publishedAt: &future,
 				expiresAt:   nil,
 				want:        domain.StateScheduled,
 			},
 			{
-				name:        "PublishedAt<=now で ExpiresAt が NULL のとき、Published になる",
+				name:        "PublishedAt<=nowでExpiresAtがNULLのとき、Publishedになる",
 				publishedAt: &past,
 				expiresAt:   nil,
 				want:        domain.StatePublished,
 			},
 			{
-				name:        "PublishedAt<=now で ExpiresAt が未来のとき、Published になる",
+				name:        "PublishedAt<=nowでExpiresAtが未来のとき、Publishedになる",
 				publishedAt: &past,
 				expiresAt:   &future,
 				want:        domain.StatePublished,
 			},
 			{
-				name:        "PublishedAt<=now で ExpiresAt が過去のとき、Expired になる",
+				name:        "PublishedAt<=nowでExpiresAtが過去のとき、Expiredになる",
 				publishedAt: &past,
 				expiresAt:   &past,
 				want:        domain.StateExpired,

@@ -46,7 +46,7 @@ func TestCreate(t *testing.T) {
 			wantTitleByLang map[string]string
 		}{
 			{
-				name: "翻訳が 0 件でも本体行が作られる",
+				name: "翻訳が0件でも本体行が作られる",
 				params: domain.CreateAnnouncementParams{
 					Type:         domain.TypeInfo,
 					PublishedAt:  &past,
@@ -55,7 +55,7 @@ func TestCreate(t *testing.T) {
 				wantTitleByLang: map[string]string{},
 			},
 			{
-				name: "ja のみのとき、ja 翻訳が保存される",
+				name: "jaのみのとき、ja翻訳が保存される",
 				params: domain.CreateAnnouncementParams{
 					Type:         domain.TypeInfo,
 					PublishedAt:  &past,
@@ -64,7 +64,7 @@ func TestCreate(t *testing.T) {
 				wantTitleByLang: map[string]string{domain.LangJa: "T"},
 			},
 			{
-				name: "ja と en のとき、両翻訳が同一 tx で保存される",
+				name: "jaとenのとき、両翻訳が同一txで保存される",
 				params: domain.CreateAnnouncementParams{
 					Type:        domain.TypeInfo,
 					PublishedAt: &past,
@@ -103,7 +103,7 @@ func TestCreate(t *testing.T) {
 
 func TestListPublished(t *testing.T) {
 	t.Run("公開告知一覧の取得", func(t *testing.T) {
-		t.Run("公開条件を満たす行だけが lang 別に返る", func(t *testing.T) {
+		t.Run("公開条件を満たす行だけがlang別に返る", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -170,7 +170,7 @@ func TestListPublished(t *testing.T) {
 				wantTitles []string
 			}{
 				{
-					name: "lang=ja のとき、公開条件を満たす行 (ja+en 行 / ja only 行 / expires_at>now 行 / published_at==now 行) を返す (expires_at==now は含まない)",
+					name: "lang=jaのとき、公開条件を満たす行 (ja+en行 / ja only行 / expires_at>now行 / published_at==now行)を返す (expires_at==nowは含まない)",
 					lang: domain.LangJa,
 					wantTitles: []string{
 						"published_at<=now (ja+en)",
@@ -180,7 +180,7 @@ func TestListPublished(t *testing.T) {
 					},
 				},
 				{
-					name: "lang=en のとき、公開条件を満たし en 翻訳もある 1 件のみ返す",
+					name: "lang=enのとき、公開条件を満たしen翻訳もある1件のみ返す",
 					lang: domain.LangEn,
 					wantTitles: []string{
 						"published_at<=now (ja+en) [en]",
@@ -202,7 +202,7 @@ func TestListPublished(t *testing.T) {
 			}
 		})
 
-		t.Run("空 DB のとき、nil でなく長さ 0 の slice を返す", func(t *testing.T) {
+		t.Run("空DBのとき、nilでなく長さ0のsliceを返す", func(t *testing.T) {
 			// 呼び出し側が range できる契約のため、空でも nil を返さない。
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
@@ -212,7 +212,7 @@ func TestListPublished(t *testing.T) {
 			assert.Empty(t, items)
 		})
 
-		t.Run("published_at DESC・announcement_id DESC で並ぶ", func(t *testing.T) {
+		t.Run("published_at DESC・announcement_id DESCで並ぶ", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -242,7 +242,7 @@ func TestListPublished(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	t.Run("state による絞り込み一覧", func(t *testing.T) {
+	t.Run("stateによる絞り込み一覧", func(t *testing.T) {
 		draft := domain.StateDraft
 		scheduled := domain.StateScheduled
 		published := domain.StatePublished
@@ -275,7 +275,7 @@ func TestList(t *testing.T) {
 			wantTitles []string
 		}{
 			{
-				name:  "state=nil のとき、全件を返す",
+				name:  "state=nilのとき、全件を返す",
 				state: nil,
 				wantTitles: []string{
 					"draft", "scheduled", "published", "expired", "draft with past expires",
@@ -283,22 +283,22 @@ func TestList(t *testing.T) {
 				},
 			},
 			{
-				name:       "state=Draft のとき、PublishedAt IS NULL の 2 件を返す (expires_at の値に依存しない)",
+				name:       "state=Draftのとき、PublishedAt IS NULLの2件を返す (expires_atの値に依存しない)",
 				state:      &draft,
 				wantTitles: []string{"draft", "draft with past expires"},
 			},
 			{
-				name:       "state=Scheduled のとき、公開時刻が現在時刻より未来の 1 件を返す (公開時刻が現在時刻と等しい行は含まない)",
+				name:       "state=Scheduledのとき、公開時刻が現在時刻より未来の1件を返す (公開時刻が現在時刻と等しい行は含まない)",
 				state:      &scheduled,
 				wantTitles: []string{"scheduled"},
 			},
 			{
-				name:       "state=Published のとき、公開時刻到達済みかつ未失効の行を返す (公開時刻が現在時刻と等しい行を含み、失効時刻が現在時刻と等しい行は含まない)",
+				name:       "state=Publishedのとき、公開時刻到達済みかつ未失効の行を返す (公開時刻が現在時刻と等しい行を含み、失効時刻が現在時刻と等しい行は含まない)",
 				state:      &published,
 				wantTitles: []string{"published", "published_at==now"},
 			},
 			{
-				name:       "state=Expired のとき、公開時刻が過去かつ失効時刻が過去以下の行を返す (失効時刻が現在時刻と等しい行を含む、下書き系は含まない)",
+				name:       "state=Expiredのとき、公開時刻が過去かつ失効時刻が過去以下の行を返す (失効時刻が現在時刻と等しい行を含む、下書き系は含まない)",
 				state:      &expired,
 				wantTitles: []string{"expired", "expires_at==now"},
 			},
@@ -320,7 +320,7 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("告知が 1 件も無いとき、nil でなく長さ 0 の一覧が返る", func(t *testing.T) {
+	t.Run("告知が1件も無いとき、nilでなく長さ0の一覧が返る", func(t *testing.T) {
 		repo := newAnnouncementRepo(t)
 		ctx := context.Background()
 
@@ -333,7 +333,7 @@ func TestList(t *testing.T) {
 
 func TestGetPublishedDetail(t *testing.T) {
 	t.Run("公開告知詳細の取得", func(t *testing.T) {
-		t.Run("published_at の値に依存せず翻訳行があれば返る", func(t *testing.T) {
+		t.Run("published_atの値に依存せず翻訳行があれば返る", func(t *testing.T) {
 			// 公開期間外でもアクセス可 (published_at に依存しない)。
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
@@ -357,17 +357,17 @@ func TestGetPublishedDetail(t *testing.T) {
 				wantBody string
 			}{
 				{
-					name:     "published_at<=now のとき、body を返す",
+					name:     "published_at<=nowのとき、bodyを返す",
 					id:       pastID,
 					wantBody: "B-past",
 				},
 				{
-					name:     "published_at=NULL のとき、body を返す",
+					name:     "published_at=NULLのとき、bodyを返す",
 					id:       nullID,
 					wantBody: "B-null",
 				},
 				{
-					name:     "published_at>now のとき、body を返す",
+					name:     "published_at>nowのとき、bodyを返す",
 					id:       futureID,
 					wantBody: "B-future",
 				},
@@ -383,7 +383,7 @@ func TestGetPublishedDetail(t *testing.T) {
 			}
 		})
 
-		t.Run("対象が無いとき、ErrNotFound になり detail は nil", func(t *testing.T) {
+		t.Run("対象が無いとき、ErrNotFoundになりdetailはnil", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -397,12 +397,12 @@ func TestGetPublishedDetail(t *testing.T) {
 				lang string
 			}{
 				{
-					name: "指定 lang の翻訳行が無い (ja のみ存在する行に en で問い合わせ) とき、ErrNotFound になる",
+					name: "指定langの翻訳行が無い (jaのみ存在する行にenで問い合わせ)とき、ErrNotFoundになる",
 					id:   jaOnlyID,
 					lang: domain.LangEn,
 				},
 				{
-					name: "announcement_id の行が無いとき、ErrNotFound になる",
+					name: "announcement_idの行が無いとき、ErrNotFoundになる",
 					id:   999999,
 					lang: domain.LangJa,
 				},
@@ -421,7 +421,7 @@ func TestGetPublishedDetail(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	t.Run("告知の更新", func(t *testing.T) {
-		t.Run("本体属性 (type / published_at) が更新される", func(t *testing.T) {
+		t.Run("本体属性 (type / published_at)が更新される", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 			newTime := fixedNow.Add(time.Hour)
@@ -441,7 +441,7 @@ func TestUpdate(t *testing.T) {
 			assert.True(t, newTime.Equal(*aw.Announcement.PublishedAt), "want=%v got=%v", newTime, *aw.Announcement.PublishedAt)
 		})
 
-		t.Run("未存在 ID のとき、port.ErrNotFound になる", func(t *testing.T) {
+		t.Run("未存在IDのとき、port.ErrNotFoundになる", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -452,7 +452,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpsertTranslation(t *testing.T) {
-	t.Run("翻訳の UPSERT", func(t *testing.T) {
+	t.Run("翻訳のUPSERT", func(t *testing.T) {
 		// 対象 (announcement_id, lang) の 1 行のみを変更し、他 lang 行には触れないことを確かめる。
 		cases := []struct {
 			name            string
@@ -464,7 +464,7 @@ func TestUpsertTranslation(t *testing.T) {
 			wantBodyByLang  map[string]string
 		}{
 			{
-				name:        "ja のみの状態に en を追加するとき (INSERT)、ja 行は変わらない",
+				name:        "jaのみの状態にenを追加するとき (INSERT)、ja行は変わらない",
 				seed:        jaTr("T-ja-v1", "B-ja-v1"),
 				upsertLang:  domain.LangEn,
 				upsertTitle: "T-en-v1",
@@ -479,7 +479,7 @@ func TestUpsertTranslation(t *testing.T) {
 				},
 			},
 			{
-				name: "en を更新するとき (UPDATE)、ja 行は v1 のまま",
+				name: "enを更新するとき (UPDATE)、ja行はv1のまま",
 				seed: []domain.TranslationInput{
 					{Lang: domain.LangJa, Title: "T-ja-v1", Body: "B-ja-v1"},
 					{Lang: domain.LangEn, Title: "T-en-v1", Body: "B-en-v1"},
@@ -497,7 +497,7 @@ func TestUpsertTranslation(t *testing.T) {
 				},
 			},
 			{
-				name: "ja を更新するとき (UPDATE)、en 行は v1 のまま",
+				name: "jaを更新するとき (UPDATE)、en行はv1のまま",
 				seed: []domain.TranslationInput{
 					{Lang: domain.LangJa, Title: "T-ja-v1", Body: "B-ja-v1"},
 					{Lang: domain.LangEn, Title: "T-en-v1", Body: "B-en-v1"},
@@ -543,7 +543,7 @@ func TestUpsertTranslation(t *testing.T) {
 			})
 		}
 
-		t.Run("親記事が無いとき、port.ErrNotFound になる", func(t *testing.T) {
+		t.Run("親記事が無いとき、port.ErrNotFoundになる", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -555,7 +555,7 @@ func TestUpsertTranslation(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Run("告知の削除", func(t *testing.T) {
-		t.Run("削除すると翻訳行も FK CASCADE で同時に削除される", func(t *testing.T) {
+		t.Run("削除すると翻訳行もFK CASCADEで同時に削除される", func(t *testing.T) {
 			repo := newAnnouncementRepo(t)
 			ctx := context.Background()
 
@@ -574,13 +574,13 @@ func TestDelete(t *testing.T) {
 			setup func(t *testing.T, repo *postgres.AnnouncementRepository, ctx context.Context) int64
 		}{
 			{
-				name: "未存在 ID のとき、port.ErrNotFound になる",
+				name: "未存在IDのとき、port.ErrNotFoundになる",
 				setup: func(_ *testing.T, _ *postgres.AnnouncementRepository, _ context.Context) int64 {
 					return 999999
 				},
 			},
 			{
-				name: "一度削除済みの ID を再度削除するとき、port.ErrNotFound になる",
+				name: "一度削除済みのIDを再度削除するとき、port.ErrNotFoundになる",
 				setup: func(t *testing.T, repo *postgres.AnnouncementRepository, ctx context.Context) int64 {
 					id, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, Translations: jaTr("T", "B")})
 					require.NoError(t, err)

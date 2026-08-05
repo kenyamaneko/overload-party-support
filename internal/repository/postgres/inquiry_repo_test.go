@@ -19,7 +19,7 @@ func newInquiryRepo(t *testing.T) *postgres.InquiryRepository {
 
 func TestInquiryCreate(t *testing.T) {
 	t.Run("問い合わせの作成", func(t *testing.T) {
-		t.Run("作成すると status=new の行が採番 ID 付きで返り、連続作成で ID が単調増加する", func(t *testing.T) {
+		t.Run("作成するとstatus=newの行が採番ID付きで返り、連続作成でIDが単調増加する", func(t *testing.T) {
 			repo := newInquiryRepo(t)
 			ctx := context.Background()
 

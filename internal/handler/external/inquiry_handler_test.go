@@ -29,7 +29,7 @@ func newExternalEngine(h *external.InquiryHandler) *gin.Engine {
 }
 
 func TestSubmit(t *testing.T) {
-	t.Run("問い合わせ送信 API", func(t *testing.T) {
+	t.Run("問い合わせ送信API", func(t *testing.T) {
 		cases := []struct {
 			name       string
 			body       string
@@ -37,27 +37,27 @@ func TestSubmit(t *testing.T) {
 			wantStatus int
 		}{
 			{
-				name:       "正常な body のとき、200 になる",
+				name:       "正常なbodyのとき、200になる",
 				body:       `{"title":"T","body":"B","reply_email":"u@e.com"}`,
 				wantStatus: http.StatusOK,
 			},
 			{
-				name:       "title が欠落するとき、400 になる",
+				name:       "titleが欠落するとき、400になる",
 				body:       `{"body":"B","reply_email":"u@e.com"}`,
 				wantStatus: http.StatusBadRequest,
 			},
 			{
-				name:       "reply_email が形式不正のとき、400 になる",
+				name:       "reply_emailが形式不正のとき、400になる",
 				body:       `{"title":"T","body":"B","reply_email":"not-email"}`,
 				wantStatus: http.StatusBadRequest,
 			},
 			{
-				name:       "不正な JSON のとき、400 になる",
+				name:       "不正なJSONのとき、400になる",
 				body:       `{bad`,
 				wantStatus: http.StatusBadRequest,
 			},
 			{
-				name:       "Slack 通知が失敗するとき、500 になる",
+				name:       "Slack通知が失敗するとき、500になる",
 				body:       `{"title":"T","body":"B","reply_email":"u@e.com"}`,
 				slackErr:   errors.New("slack"),
 				wantStatus: http.StatusInternalServerError,
@@ -90,7 +90,7 @@ func TestSubmit(t *testing.T) {
 			})
 		}
 
-		t.Run("採番された inquiry_id がレスポンスに含まれる", func(t *testing.T) {
+		t.Run("採番されたinquiry_idがレスポンスに含まれる", func(t *testing.T) {
 			store := &port.MockInquiryStore{
 				CreateFn: func(_ context.Context, title, body, replyEmail string) (*domain.Inquiry, error) {
 					return &domain.Inquiry{InquiryID: 42, Title: title, Body: body, ReplyEmail: replyEmail, Status: "new", CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil

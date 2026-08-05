@@ -27,7 +27,7 @@ func TestCreate(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name: "type が未知のとき、ErrInvalidType になる",
+				name: "typeが未知のとき、ErrInvalidTypeになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "nope",
 					Translations: []domain.TranslationInput{
@@ -37,7 +37,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidType,
 			},
 			{
-				name: "ja 翻訳が無いとき、ErrInvalidField になる",
+				name: "ja翻訳が無いとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -47,7 +47,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "翻訳が空 (ja 必須違反) のとき、ErrInvalidField になる",
+				name: "翻訳が空 (ja必須違反)のとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type:         "info",
 					Translations: nil,
@@ -55,7 +55,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "ja_title が空のとき、ErrInvalidField になる",
+				name: "ja_titleが空のとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -65,7 +65,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "ja_body が空のとき、ErrInvalidField になる",
+				name: "ja_bodyが空のとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -75,7 +75,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "en_title が空のとき、ErrInvalidField になる",
+				name: "en_titleが空のとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -86,7 +86,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "対応外 lang のとき、ErrUnsupportedLang になる",
+				name: "対応外langのとき、ErrUnsupportedLangになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -97,7 +97,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrUnsupportedLang,
 			},
 			{
-				name: "lang が重複するとき、ErrInvalidField になる",
+				name: "langが重複するとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -108,7 +108,7 @@ func TestCreate(t *testing.T) {
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name: "ja_title が上限超過 (201 文字) のとき、ErrInvalidField になる",
+				name: "ja_titleが上限超過 (201文字)のとき、ErrInvalidFieldになる",
 				params: domain.CreateAnnouncementParams{
 					Type: "info",
 					Translations: []domain.TranslationInput{
@@ -127,7 +127,7 @@ func TestCreate(t *testing.T) {
 			})
 		}
 
-		t.Run("ja_title が上限ちょうど (200 文字) のとき、作成できる", func(t *testing.T) {
+		t.Run("ja_titleが上限ちょうど (200文字)のとき、作成できる", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				CreateFn: func(_ context.Context, _ domain.CreateAnnouncementParams) (int64, error) {
 					return 1, nil
@@ -171,7 +171,7 @@ func TestCreate(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	t.Run("status フィルタの解析", func(t *testing.T) {
+	t.Run("statusフィルタの解析", func(t *testing.T) {
 		draft := domain.StateDraft
 		scheduled := domain.StateScheduled
 		published := domain.StatePublished
@@ -183,32 +183,32 @@ func TestList(t *testing.T) {
 			wantState *string
 		}{
 			{
-				name:      "空文字のとき、nil (全件) を repo に渡す",
+				name:      "空文字のとき、nil (全件)をrepoに渡す",
 				filter:    "",
 				wantState: nil,
 			},
 			{
-				name:      "all のとき、nil (全件) を repo に渡す",
+				name:      "allのとき、nil (全件)をrepoに渡す",
 				filter:    "all",
 				wantState: nil,
 			},
 			{
-				name:      "draft のとき、StateDraft を repo に渡す",
+				name:      "draftのとき、StateDraftをrepoに渡す",
 				filter:    "draft",
 				wantState: &draft,
 			},
 			{
-				name:      "scheduled のとき、StateScheduled を repo に渡す",
+				name:      "scheduledのとき、StateScheduledをrepoに渡す",
 				filter:    "scheduled",
 				wantState: &scheduled,
 			},
 			{
-				name:      "published のとき、StatePublished を repo に渡す",
+				name:      "publishedのとき、StatePublishedをrepoに渡す",
 				filter:    "published",
 				wantState: &published,
 			},
 			{
-				name:      "expired のとき、StateExpired を repo に渡す",
+				name:      "expiredのとき、StateExpiredをrepoに渡す",
 				filter:    "expired",
 				wantState: &expired,
 			},
@@ -230,7 +230,7 @@ func TestList(t *testing.T) {
 			})
 		}
 
-		t.Run("未知の status のとき、ErrInvalidStatusFilter になる", func(t *testing.T) {
+		t.Run("未知のstatusのとき、ErrInvalidStatusFilterになる", func(t *testing.T) {
 			// ListFn を未設定にすることで、絞り込みに到達する前に弾かれることを担保する。
 			repo := &port.MockAnnouncementRepo{}
 			_, err := announcementadmin.New(repo, nowFixed).List(context.Background(), "invalid")
@@ -265,7 +265,7 @@ func TestGet(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "告知が見つからないとき、ErrNotFound になる",
+				name:    "告知が見つからないとき、ErrNotFoundになる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
@@ -304,7 +304,7 @@ func TestUpdate(t *testing.T) {
 				wantErr: nil,
 			},
 			{
-				name:    "告知が見つからないとき、ErrNotFound になる",
+				name:    "告知が見つからないとき、ErrNotFoundになる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
@@ -343,7 +343,7 @@ func TestDelete(t *testing.T) {
 				wantErr: nil,
 			},
 			{
-				name:    "告知が見つからないとき、ErrNotFound になる",
+				name:    "告知が見つからないとき、ErrNotFoundになる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcementadmin.ErrNotFound,
 			},
@@ -378,28 +378,28 @@ func TestUpsertTranslation(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "対応外 lang のとき、ErrUnsupportedLang になる",
+				name:    "対応外langのとき、ErrUnsupportedLangになる",
 				lang:    "fr",
 				title:   "T",
 				body:    "B",
 				wantErr: announcementadmin.ErrUnsupportedLang,
 			},
 			{
-				name:    "title が空のとき、ErrInvalidField になる",
+				name:    "titleが空のとき、ErrInvalidFieldになる",
 				lang:    domain.LangJa,
 				title:   "",
 				body:    "B",
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name:    "body が空のとき、ErrInvalidField になる",
+				name:    "bodyが空のとき、ErrInvalidFieldになる",
 				lang:    domain.LangJa,
 				title:   "T",
 				body:    "",
 				wantErr: announcementadmin.ErrInvalidField,
 			},
 			{
-				name:    "title が上限超過 (201 文字) のとき、ErrInvalidField になる",
+				name:    "titleが上限超過 (201文字)のとき、ErrInvalidFieldになる",
 				lang:    domain.LangJa,
 				title:   strings.Repeat("あ", 201),
 				body:    "B",
@@ -415,7 +415,7 @@ func TestUpsertTranslation(t *testing.T) {
 			})
 		}
 
-		t.Run("title が上限ちょうど (200 文字) のとき、登録できる", func(t *testing.T) {
+		t.Run("titleが上限ちょうど (200文字)のとき、登録できる", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				UpsertTranslationFn: func(_ context.Context, _ int64, _, _, _ string) error {
 					return nil
@@ -426,7 +426,7 @@ func TestUpsertTranslation(t *testing.T) {
 			require.NoError(t, err)
 		})
 
-		t.Run("告知が見つからないとき、ErrNotFound になる", func(t *testing.T) {
+		t.Run("告知が見つからないとき、ErrNotFoundになる", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				UpsertTranslationFn: func(_ context.Context, _ int64, _ string, _ string, _ string) error {
 					return port.ErrNotFound

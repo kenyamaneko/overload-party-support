@@ -18,8 +18,8 @@ import (
 )
 
 func TestServe(t *testing.T) {
-	t.Run("gateway 向け内部 API サーバの起動と停止", func(t *testing.T) {
-		t.Run("起動中はお知らせ一覧の取得が 200 を返し、停止要求で終了する", func(t *testing.T) {
+	t.Run("gateway向け内部APIサーバの起動と停止", func(t *testing.T) {
+		t.Run("起動中はお知らせ一覧の取得が200を返し、停止要求で終了する", func(t *testing.T) {
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
 

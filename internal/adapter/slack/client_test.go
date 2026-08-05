@@ -92,7 +92,7 @@ func TestNotifyInquiryReceived(t *testing.T) {
 			assert.Contains(t, got.raw, "抜粋本文")
 		})
 
-		t.Run("HTTP 200 でも応答が ok:false のとき、エラーになる", func(t *testing.T) {
+		t.Run("HTTP 200でも応答がok:falseのとき、エラーになる", func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_auth"}`))
@@ -105,7 +105,7 @@ func TestNotifyInquiryReceived(t *testing.T) {
 			assert.Contains(t, err.Error(), "invalid_auth")
 		})
 
-		t.Run("応答が JSON でないとき、エラーになる", func(t *testing.T) {
+		t.Run("応答がJSONでないとき、エラーになる", func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte("not json"))
 			}))

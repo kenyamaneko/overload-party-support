@@ -20,7 +20,7 @@ func nowFixed() time.Time { return fixedNow }
 
 func TestList(t *testing.T) {
 	t.Run("公開告知一覧の取得", func(t *testing.T) {
-		t.Run("lang と now を repo に渡し、結果をそのまま返す", func(t *testing.T) {
+		t.Run("langとnowをrepoに渡し、結果をそのまま返す", func(t *testing.T) {
 			want := []domain.AnnouncementSummary{{AnnouncementID: 1, Type: domain.TypeInfo, Title: "T", PublishedAt: fixedNow}}
 			var gotLang string
 			var gotNow time.Time
@@ -57,17 +57,17 @@ func TestList(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "lang が未指定のとき、ErrLangRequired になる",
+				name:    "langが未指定のとき、ErrLangRequiredになる",
 				lang:    "",
 				wantErr: announcement.ErrLangRequired,
 			},
 			{
-				name:    "lang が対応外 (fr) のとき、ErrUnsupportedLang になる",
+				name:    "langが対応外 (fr)のとき、ErrUnsupportedLangになる",
 				lang:    "fr",
 				wantErr: announcement.ErrUnsupportedLang,
 			},
 			{
-				name:    "lang が大文字 (JA) のとき、ErrUnsupportedLang になる",
+				name:    "langが大文字 (JA)のとき、ErrUnsupportedLangになる",
 				lang:    "JA",
 				wantErr: announcement.ErrUnsupportedLang,
 			},
@@ -85,7 +85,7 @@ func TestList(t *testing.T) {
 
 func TestGetDetail(t *testing.T) {
 	t.Run("公開告知詳細の取得", func(t *testing.T) {
-		t.Run("id と lang を repo に渡し、結果をそのまま返す", func(t *testing.T) {
+		t.Run("idとlangをrepoに渡し、結果をそのまま返す", func(t *testing.T) {
 			want := &domain.AnnouncementDetail{AnnouncementID: 1}
 			var gotID int64
 			var gotLang string
@@ -111,12 +111,12 @@ func TestGetDetail(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "repo が port.ErrNotFound を返すとき、ErrNotFound にマップされる",
+				name:    "repoがport.ErrNotFoundを返すとき、ErrNotFoundにマップされる",
 				repoErr: port.ErrNotFound,
 				wantErr: announcement.ErrNotFound,
 			},
 			{
-				name:    "repo がその他のエラーを返すとき、握りつぶさずそのまま透過される",
+				name:    "repoがその他のエラーを返すとき、握りつぶさずそのまま透過される",
 				repoErr: dbErr,
 				wantErr: dbErr,
 			},
@@ -141,17 +141,17 @@ func TestGetDetail(t *testing.T) {
 			wantErr error
 		}{
 			{
-				name:    "lang が未指定のとき、ErrLangRequired になる",
+				name:    "langが未指定のとき、ErrLangRequiredになる",
 				lang:    "",
 				wantErr: announcement.ErrLangRequired,
 			},
 			{
-				name:    "lang が対応外 (fr) のとき、ErrUnsupportedLang になる",
+				name:    "langが対応外 (fr)のとき、ErrUnsupportedLangになる",
 				lang:    "fr",
 				wantErr: announcement.ErrUnsupportedLang,
 			},
 			{
-				name:    "lang が大文字 (JA) のとき、ErrUnsupportedLang になる",
+				name:    "langが大文字 (JA)のとき、ErrUnsupportedLangになる",
 				lang:    "JA",
 				wantErr: announcement.ErrUnsupportedLang,
 			},

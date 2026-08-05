@@ -75,7 +75,7 @@ type sendgridPayload struct {
 
 func TestSendInquiryReceipt(t *testing.T) {
 	t.Run("受付確認メールの送信", func(t *testing.T) {
-		t.Run("SendGrid が 202 を返すとき、宛先・件名・本文を載せた内容が送信されエラーにならない", func(t *testing.T) {
+		t.Run("SendGridが202を返すとき、宛先・件名・本文を載せた内容が送信されエラーにならない", func(t *testing.T) {
 			received := make(chan sendgridPayload, 1)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, err := io.ReadAll(r.Body)
@@ -100,7 +100,7 @@ func TestSendInquiryReceipt(t *testing.T) {
 			assert.Contains(t, got.Content[0].Value, "抜粋本文")
 		})
 
-		t.Run("SendGrid が 400 を返すとき、エラーになる", func(t *testing.T) {
+		t.Run("SendGridが400を返すとき、エラーになる", func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 			}))
