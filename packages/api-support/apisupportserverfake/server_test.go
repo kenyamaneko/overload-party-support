@@ -14,7 +14,7 @@ import (
 
 func TestServer(t *testing.T) {
 	t.Run("サーバフェイク", func(t *testing.T) {
-		t.Run("GetAnnouncement は Fn 未設定のとき、404 になる", func(t *testing.T) {
+		t.Run("GetAnnouncementはFn未設定のとき、404になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -26,7 +26,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 
-		t.Run("ListAnnouncementsFn は lang を受け取る", func(t *testing.T) {
+		t.Run("ListAnnouncementsFnはlangを受け取る", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -45,7 +45,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, "ja", gotLang)
 		})
 
-		t.Run("GetAnnouncementFn は announcement_id を int64 で受け取る", func(t *testing.T) {
+		t.Run("GetAnnouncementFnはannouncement_idをint64で受け取る", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -73,7 +73,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, "en", gotLang)
 		})
 
-		t.Run("不正な announcement_id のとき、Fn を呼ばず 404 を返す", func(t *testing.T) {
+		t.Run("不正なannouncement_idのとき、Fnを呼ばず404を返す", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -92,7 +92,7 @@ func TestServer(t *testing.T) {
 			assert.False(t, called, "id parse 失敗時は Fn を呼ばない")
 		})
 
-		t.Run("SubmitInquiryFn は SubmitInquiryRequest を typed で受け取る", func(t *testing.T) {
+		t.Run("SubmitInquiryFnはSubmitInquiryRequestをtypedで受け取る", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 

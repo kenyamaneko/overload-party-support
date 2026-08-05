@@ -25,13 +25,13 @@ func TestSubmit(t *testing.T) {
 				email string
 			}{
 				{
-					name:  "全項目が正常のとき、作成され repo・slack・email が呼ばれる",
+					name:  "全項目が正常のとき、作成されrepo・slack・emailが呼ばれる",
 					title: "T",
 					body:  "B",
 					email: "user@example.com",
 				},
 				{
-					name:  "title が上限ちょうど (100 文字) のとき、作成され repo・slack・email が呼ばれる",
+					name:  "titleが上限ちょうど (100文字)のとき、作成されrepo・slack・emailが呼ばれる",
 					title: strings.Repeat("あ", 100),
 					body:  "B",
 					email: "u@e.com",
@@ -76,42 +76,42 @@ func TestSubmit(t *testing.T) {
 				wantErr error
 			}{
 				{
-					name:    "title が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					name:    "titleが空のとき、ErrInvalidInquiryになり副作用は呼ばれない",
 					title:   "",
 					body:    "B",
 					email:   "user@example.com",
 					wantErr: inquiry.ErrInvalidInquiry,
 				},
 				{
-					name:    "body が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					name:    "bodyが空のとき、ErrInvalidInquiryになり副作用は呼ばれない",
 					title:   "T",
 					body:    "",
 					email:   "user@example.com",
 					wantErr: inquiry.ErrInvalidInquiry,
 				},
 				{
-					name:    "email が空のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					name:    "emailが空のとき、ErrInvalidInquiryになり副作用は呼ばれない",
 					title:   "T",
 					body:    "B",
 					email:   "",
 					wantErr: inquiry.ErrInvalidInquiry,
 				},
 				{
-					name:    "title が上限超過 (101 文字) のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					name:    "titleが上限超過 (101文字)のとき、ErrInvalidInquiryになり副作用は呼ばれない",
 					title:   strings.Repeat("あ", 101),
 					body:    "B",
 					email:   "u@e.com",
 					wantErr: inquiry.ErrInvalidInquiry,
 				},
 				{
-					name:    "body が上限超過 (4001 文字) のとき、ErrInvalidInquiry になり副作用は呼ばれない",
+					name:    "bodyが上限超過 (4001文字)のとき、ErrInvalidInquiryになり副作用は呼ばれない",
 					title:   "T",
 					body:    strings.Repeat("あ", 4001),
 					email:   "u@e.com",
 					wantErr: inquiry.ErrInvalidInquiry,
 				},
 				{
-					name:    "email が形式不正のとき、ErrInvalidEmail になり副作用は呼ばれない",
+					name:    "emailが形式不正のとき、ErrInvalidEmailになり副作用は呼ばれない",
 					title:   "T",
 					body:    "B",
 					email:   "not-an-email",
@@ -150,7 +150,7 @@ func TestSubmit(t *testing.T) {
 			}
 		})
 
-		t.Run("副作用の fail-fast", func(t *testing.T) {
+		t.Run("副作用のfail-fast", func(t *testing.T) {
 			dbErr := errors.New("db lost")
 			slackErr := errors.New("slack 500")
 			sendErr := errors.New("sendgrid 500")
@@ -167,7 +167,7 @@ func TestSubmit(t *testing.T) {
 				wantErr        error
 			}{
 				{
-					name:           "repo create が失敗するとき、slack・email は呼ばれずそのエラーが返る",
+					name:           "repo createが失敗するとき、slack・emailは呼ばれずそのエラーが返る",
 					createErr:      dbErr,
 					wantCreateCall: true,
 					wantSlackCall:  false,
@@ -175,7 +175,7 @@ func TestSubmit(t *testing.T) {
 					wantErr:        dbErr,
 				},
 				{
-					name:           "slack 通知が失敗するとき、email は呼ばれずそのエラーが返る",
+					name:           "slack通知が失敗するとき、emailは呼ばれずそのエラーが返る",
 					createResult:   newInquiry(1),
 					slackErr:       slackErr,
 					wantCreateCall: true,
@@ -184,7 +184,7 @@ func TestSubmit(t *testing.T) {
 					wantErr:        slackErr,
 				},
 				{
-					name:           "email 送信が失敗するとき、そのエラーが透過される",
+					name:           "email送信が失敗するとき、そのエラーが透過される",
 					createResult:   newInquiry(1),
 					sendErr:        sendErr,
 					wantCreateCall: true,
@@ -193,7 +193,7 @@ func TestSubmit(t *testing.T) {
 					wantErr:        sendErr,
 				},
 				{
-					name:           "全ステップ成功のとき、repo・slack・email が呼ばれエラーにならない",
+					name:           "全ステップ成功のとき、repo・slack・emailが呼ばれエラーにならない",
 					createResult:   newInquiry(1),
 					wantCreateCall: true,
 					wantSlackCall:  true,
@@ -234,7 +234,7 @@ func TestSubmit(t *testing.T) {
 			}
 		})
 
-		t.Run("Slack snippet の切り詰め", func(t *testing.T) {
+		t.Run("Slack snippetの切り詰め", func(t *testing.T) {
 			cases := []struct {
 				name        string
 				body        string
@@ -242,25 +242,25 @@ func TestSubmit(t *testing.T) {
 				wantSnippet string
 			}{
 				{
-					name:        "body が snippet 長より短いとき、そのまま渡される",
+					name:        "bodyがsnippet長より短いとき、そのまま渡される",
 					body:        "short",
 					snippetLen:  200,
 					wantSnippet: "short",
 				},
 				{
-					name:        "body が snippet 長ちょうど (200 文字) のとき、切り詰めない",
+					name:        "bodyがsnippet長ちょうど (200文字)のとき、切り詰めない",
 					body:        strings.Repeat("あ", 200),
 					snippetLen:  200,
 					wantSnippet: strings.Repeat("あ", 200),
 				},
 				{
-					name:        "body が snippet 長超過のとき、先頭 (50 文字) のみ渡される",
+					name:        "bodyがsnippet長超過のとき、先頭 (50文字)のみ渡される",
 					body:        strings.Repeat("あ", 300),
 					snippetLen:  50,
 					wantSnippet: strings.Repeat("あ", 50),
 				},
 				{
-					name:        "切り詰め位置が空白に当たるとき、末尾の空白を除いた抜粋が Slack 通知に渡される",
+					name:        "切り詰め位置が空白に当たるとき、末尾の空白を除いた抜粋がSlack通知に渡される",
 					body:        "abcd efgh",
 					snippetLen:  5,
 					wantSnippet: "abcd",

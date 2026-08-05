@@ -15,7 +15,7 @@ import (
 
 func TestClient_ListAnnouncements(t *testing.T) {
 	t.Run("ListAnnouncements", func(t *testing.T) {
-		t.Run("400 を受けたとき、ErrBadRequest になる", func(t *testing.T) {
+		t.Run("400を受けたとき、ErrBadRequestになる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.ListAnnouncementsFn = func(_ string) (int, any) { return http.StatusBadRequest, nil }
@@ -25,7 +25,7 @@ func TestClient_ListAnnouncements(t *testing.T) {
 			assertSentinel(t, err, apisupportclient.ErrBadRequest)
 		})
 
-		t.Run("401 を受けたとき、ErrUnauthorized になる", func(t *testing.T) {
+		t.Run("401を受けたとき、ErrUnauthorizedになる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.ListAnnouncementsFn = func(_ string) (int, any) { return http.StatusUnauthorized, nil }
@@ -35,7 +35,7 @@ func TestClient_ListAnnouncements(t *testing.T) {
 			assertSentinel(t, err, apisupportclient.ErrUnauthorized)
 		})
 
-		t.Run("400 を受けたとき、エラーメッセージに操作名 ListAnnouncements が含まれる", func(t *testing.T) {
+		t.Run("400を受けたとき、エラーメッセージに操作名ListAnnouncementsが含まれる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.ListAnnouncementsFn = func(_ string) (int, any) { return http.StatusBadRequest, nil }
@@ -55,17 +55,17 @@ func TestClient_GetAnnouncement(t *testing.T) {
 			wantTarget error
 		}{
 			{
-				name:       "400 を受けたとき、ErrBadRequest になる",
+				name:       "400を受けたとき、ErrBadRequestになる",
 				status:     http.StatusBadRequest,
 				wantTarget: apisupportclient.ErrBadRequest,
 			},
 			{
-				name:       "404 を受けたとき、ErrNotFound になる",
+				name:       "404を受けたとき、ErrNotFoundになる",
 				status:     http.StatusNotFound,
 				wantTarget: apisupportclient.ErrNotFound,
 			},
 			{
-				name:       "500 を受けたとき、ErrInternalServer になる",
+				name:       "500を受けたとき、ErrInternalServerになる",
 				status:     http.StatusInternalServerError,
 				wantTarget: apisupportclient.ErrInternalServer,
 			},
@@ -82,7 +82,7 @@ func TestClient_GetAnnouncement(t *testing.T) {
 			})
 		}
 
-		t.Run("404 を受けたとき、エラーメッセージに操作名 GetAnnouncement が含まれる", func(t *testing.T) {
+		t.Run("404を受けたとき、エラーメッセージに操作名GetAnnouncementが含まれる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.GetAnnouncementFn = func(_ int64, _ string) (int, any) { return http.StatusNotFound, nil }
@@ -96,7 +96,7 @@ func TestClient_GetAnnouncement(t *testing.T) {
 
 func TestClient_SubmitInquiry(t *testing.T) {
 	t.Run("SubmitInquiry", func(t *testing.T) {
-		t.Run("400 を受けたとき、ErrBadRequest になる", func(t *testing.T) {
+		t.Run("400を受けたとき、ErrBadRequestになる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusBadRequest, nil }
@@ -106,7 +106,7 @@ func TestClient_SubmitInquiry(t *testing.T) {
 			assertSentinel(t, err, apisupportclient.ErrBadRequest)
 		})
 
-		t.Run("400 を受けたとき、エラーメッセージに操作名 SubmitInquiry が含まれる", func(t *testing.T) {
+		t.Run("400を受けたとき、エラーメッセージに操作名SubmitInquiryが含まれる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusBadRequest, nil }
@@ -116,7 +116,7 @@ func TestClient_SubmitInquiry(t *testing.T) {
 			assert.ErrorContains(t, err, "apisupportclient: SubmitInquiry:")
 		})
 
-		t.Run("仕様に無い status (418) を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
+		t.Run("仕様に無いstatus (418)を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusTeapot, nil }

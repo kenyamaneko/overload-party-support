@@ -43,17 +43,17 @@ func TestFromEnv(t *testing.T) {
 			mutate func(m map[string]string)
 		}{
 			{
-				name:   "local の必須 env が揃うとき、Config が構築される",
+				name:   "localの必須envが揃うとき、Configが構築される",
 				base:   validLocalEnv,
 				mutate: func(_ map[string]string) {},
 			},
 			{
-				name:   "ENV が staging のとき、Config が構築される",
+				name:   "ENVがstagingのとき、Configが構築される",
 				base:   validProdEnv,
 				mutate: func(m map[string]string) { m["ENV"] = "staging" },
 			},
 			{
-				name:   "ENV が production のとき、Config が構築される",
+				name:   "ENVがproductionのとき、Configが構築される",
 				base:   validProdEnv,
 				mutate: func(_ map[string]string) {},
 			},
@@ -79,49 +79,49 @@ func TestFromEnv(t *testing.T) {
 			wantErrContains string
 		}{
 			{
-				name:            "ENV が欠けるとき、エラーになる",
+				name:            "ENVが欠けるとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { delete(m, "ENV") },
 				wantErrContains: "ENV is required",
 			},
 			{
-				name:            "ENV が未知値のとき、エラーになる",
+				name:            "ENVが未知値のとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { m["ENV"] = "dev" },
 				wantErrContains: "ENV: unsupported value",
 			},
 			{
-				name:            "INTERNAL_PORT が欠けるとき、エラーになる",
+				name:            "INTERNAL_PORTが欠けるとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { delete(m, "INTERNAL_PORT") },
 				wantErrContains: "INTERNAL_PORT is required",
 			},
 			{
-				name:            "INTERNAL_PORT が非整数のとき、エラーになる",
+				name:            "INTERNAL_PORTが非整数のとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { m["INTERNAL_PORT"] = "abc" },
 				wantErrContains: "INTERNAL_PORT: not an integer",
 			},
 			{
-				name:            "DATABASE_CONN が欠けるとき、エラーになる",
+				name:            "DATABASE_CONNが欠けるとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { delete(m, "DATABASE_CONN") },
 				wantErrContains: "DATABASE_CONN is required",
 			},
 			{
-				name:            "DATABASE_IAM_AUTH_ENABLED が欠けるとき、エラーになる",
+				name:            "DATABASE_IAM_AUTH_ENABLEDが欠けるとき、エラーになる",
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { delete(m, "DATABASE_IAM_AUTH_ENABLED") },
 				wantErrContains: "DATABASE_IAM_AUTH_ENABLED must be",
 			},
 			{
-				name:            `DATABASE_IAM_AUTH_ENABLED が "true"/"false" 以外の "yes" のとき、エラーになる`,
+				name:            `DATABASE_IAM_AUTH_ENABLEDが "true"/"false" 以外の "yes" のとき、エラーになる`,
 				base:            validLocalEnv,
 				mutate:          func(m map[string]string) { m["DATABASE_IAM_AUTH_ENABLED"] = "yes" },
 				wantErrContains: "DATABASE_IAM_AUTH_ENABLED must be",
 			},
 			{
-				name: "DATABASE_IAM_AUTH_ENABLED が true かつ CLOUDSQL_CONNECTION_NAME が未設定のとき、エラーになる",
+				name: "DATABASE_IAM_AUTH_ENABLEDがtrueかつCLOUDSQL_CONNECTION_NAMEが未設定のとき、エラーになる",
 				base: validLocalEnv,
 				mutate: func(m map[string]string) {
 					m["DATABASE_IAM_AUTH_ENABLED"] = "true"
@@ -158,7 +158,7 @@ func TestFromEnv(t *testing.T) {
 			assert.Empty(t, cfg.CloudSQLConnectionName)
 		})
 
-		t.Run("DATABASE_IAM_AUTH_ENABLED が true のとき、CLOUDSQL_CONNECTION_NAME が Config に反映される", func(t *testing.T) {
+		t.Run("DATABASE_IAM_AUTH_ENABLEDがtrueのとき、CLOUDSQL_CONNECTION_NAMEがConfigに反映される", func(t *testing.T) {
 			m := validLocalEnv()
 			m["DATABASE_IAM_AUTH_ENABLED"] = "true"
 			m["CLOUDSQL_CONNECTION_NAME"] = "overload-party-dev:asia-northeast1:overload-party-db"

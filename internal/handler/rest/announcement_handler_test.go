@@ -31,29 +31,29 @@ func newAnnouncementEngine(h *rest.AnnouncementHandler) *gin.Engine {
 }
 
 func TestAnnouncementList(t *testing.T) {
-	t.Run("公開告知一覧 API", func(t *testing.T) {
+	t.Run("公開告知一覧API", func(t *testing.T) {
 		cases := []struct {
 			name       string
 			query      string
 			wantStatus int
 		}{
 			{
-				name:       "lang=ja のとき、200 になる",
+				name:       "lang=jaのとき、200になる",
 				query:      "?lang=ja",
 				wantStatus: http.StatusOK,
 			},
 			{
-				name:       "lang=en のとき、200 になる",
+				name:       "lang=enのとき、200になる",
 				query:      "?lang=en",
 				wantStatus: http.StatusOK,
 			},
 			{
-				name:       "lang が欠落するとき、400 になる",
+				name:       "langが欠落するとき、400になる",
 				query:      "",
 				wantStatus: http.StatusBadRequest,
 			},
 			{
-				name:       "lang が対応外 (fr) のとき、400 になる",
+				name:       "langが対応外 (fr)のとき、400になる",
 				query:      "?lang=fr",
 				wantStatus: http.StatusBadRequest,
 			},
@@ -76,7 +76,7 @@ func TestAnnouncementList(t *testing.T) {
 			})
 		}
 
-		t.Run("0 件でも null でなく空配列を返す", func(t *testing.T) {
+		t.Run("0件でもnullでなく空配列を返す", func(t *testing.T) {
 			repo := &port.MockAnnouncementRepo{
 				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
 					return nil, nil
@@ -124,7 +124,7 @@ func TestAnnouncementList(t *testing.T) {
 }
 
 func TestAnnouncementGetDetail(t *testing.T) {
-	t.Run("公開告知詳細 API", func(t *testing.T) {
+	t.Run("公開告知詳細API", func(t *testing.T) {
 		pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
 		fieldCases := []struct {
@@ -133,12 +133,12 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			want   apisupport.AnnouncementDetail
 		}{
 			{
-				name:   "published_at ありのとき、全フィールドが wire へ透過される",
+				name:   "published_atありのとき、全フィールドがwireへ透過される",
 				detail: &domain.AnnouncementDetail{AnnouncementID: 7, Type: domain.TypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
 				want:   apisupport.AnnouncementDetail{AnnouncementID: 7, Type: apisupport.AnnouncementTypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
 			},
 			{
-				name:   "published_at なしのとき、published_at は null で透過される",
+				name:   "published_atなしのとき、published_atはnullで透過される",
 				detail: &domain.AnnouncementDetail{AnnouncementID: 8, Type: domain.TypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
 				want:   apisupport.AnnouncementDetail{AnnouncementID: 8, Type: apisupport.AnnouncementTypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
 			},
@@ -174,26 +174,26 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			wantStatus int
 		}{
 			{
-				name:       "非数値 ID のとき、404 になる",
+				name:       "非数値IDのとき、404になる",
 				id:         "abc",
 				query:      "?lang=ja",
 				wantStatus: http.StatusNotFound,
 			},
 			{
-				name:       "DB 障害のとき、500 になる",
+				name:       "DB障害のとき、500になる",
 				id:         "1",
 				query:      "?lang=ja",
 				repoErr:    dbErr,
 				wantStatus: http.StatusInternalServerError,
 			},
 			{
-				name:       "lang が欠落するとき、400 になる",
+				name:       "langが欠落するとき、400になる",
 				id:         "1",
 				query:      "",
 				wantStatus: http.StatusBadRequest,
 			},
 			{
-				name:       "lang が対応外のとき、400 になる",
+				name:       "langが対応外のとき、400になる",
 				id:         "1",
 				query:      "?lang=fr",
 				wantStatus: http.StatusBadRequest,
@@ -217,7 +217,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			})
 		}
 
-		t.Run("公開済みの告知が存在する ID を指定するとき、200 で本体が返る", func(t *testing.T) {
+		t.Run("公開済みの告知が存在するIDを指定するとき、200で本体が返る", func(t *testing.T) {
 			sharedPG.Truncate(t)
 			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
 			ctx := context.Background()
@@ -244,7 +244,7 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			require.Equal(t, "実DB本文", resp.Body)
 		})
 
-		t.Run("存在しない ID を指定するとき、404 になる", func(t *testing.T) {
+		t.Run("存在しないIDを指定するとき、404になる", func(t *testing.T) {
 			sharedPG.Truncate(t)
 			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
