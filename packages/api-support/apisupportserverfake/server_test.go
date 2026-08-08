@@ -1,7 +1,6 @@
 package apisupportserverfake_test
 
 import (
-	"bytes"
 	"net/http"
 	"testing"
 
@@ -90,29 +89,6 @@ func TestServer(t *testing.T) {
 
 			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 			assert.False(t, called, "id parse 失敗時は Fn を呼ばない")
-		})
-
-		t.Run("SubmitInquiryFnはSubmitInquiryRequestをtypedで受け取る", func(t *testing.T) {
-			srv := apisupportserverfake.NewServer()
-			defer srv.Close()
-
-			var gotReq apisupport.SubmitInquiryRequest
-			srv.SubmitInquiryFn = func(req apisupport.SubmitInquiryRequest) (int, any) {
-				gotReq = req
-				return http.StatusOK, apisupport.SubmitInquiryResult{InquiryID: 999}
-			}
-
-			reqBody := []byte(`{"title":"t","body":"b","reply_email":"e@example.com"}`)
-			req, _ := http.NewRequest(http.MethodPost, srv.URL()+"/api/v1/inquiries", bytes.NewReader(reqBody))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-
-			assert.Equal(t, http.StatusOK, resp.StatusCode)
-			assert.Equal(t, "t", gotReq.Title)
-			assert.Equal(t, "b", gotReq.Body)
-			assert.Equal(t, "e@example.com", gotReq.ReplyEmail)
 		})
 	})
 }

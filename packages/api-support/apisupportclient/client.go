@@ -107,18 +107,6 @@ func (c *Client) GetAnnouncement(ctx context.Context, announcementID int64, lang
 	return nil, newStatusError("GetAnnouncement", resp.StatusCode())
 }
 
-// SubmitInquiry は問い合わせフォームから受信した内容を送信する。
-func (c *Client) SubmitInquiry(ctx context.Context, req apisupport.SubmitInquiryRequest) (*apisupport.SubmitInquiryResult, error) {
-	resp, err := c.api.SubmitInquiryWithResponse(ctx, apisupport.SubmitInquiryJSONRequestBody(req))
-	if err != nil {
-		return nil, fmt.Errorf("apisupportclient: SubmitInquiry: %w", err)
-	}
-	if resp.JSON200 != nil {
-		return resp.JSON200, nil
-	}
-	return nil, newStatusError("SubmitInquiry", resp.StatusCode())
-}
-
 // newStatusError は HTTP status code から sentinel error (errors.Is 分岐可能) を生成する。
 func newStatusError(op string, code int) error {
 	var sentinel error

@@ -3,10 +3,8 @@ info:
   title: overload-party-support
   version: 0.1.0
   description: |
-    Support service の REST 契約 (gateway 経由でクライアントに届く announcements、および問い合わせフォームからの公開 API)。
+    Support service の REST 契約 (gateway 経由でクライアントに届く announcements)。
     本ファイルが SSoT。`packages/api-support` (Go) と `packages/api-support-npm` (TS) の型は本ファイルから生成する。
-
-    admin UI (/admin/*) は HTML/HTMX を返す内部 UI のため本契約には含めない。
 
 paths:
   /health:
@@ -55,26 +53,6 @@ paths:
           description: lang 未指定 / 非対応 lang
         "404":
           description: 該当お知らせ無し / 指定 lang の翻訳無し
-
-  /api/v1/inquiries:
-    post:
-      operationId: submitInquiry
-      summary: 問い合わせフォームから受信した内容を保存し Slack/Email 通知する
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SubmitInquiryRequest"
-      responses:
-        "200":
-          description: 受領成功
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubmitInquiryResult"
-        "400":
-          description: 入力検証エラー (タイトル/本文/メールアドレス不正)
 
 components:
   parameters:
@@ -156,30 +134,6 @@ components:
           type: string
           format: date-time
           nullable: true
-
-    # ─── Inquiry (api/v1) ──────────────────────────────────────────────
-    SubmitInquiryRequest:
-      description: "`POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。"
-      type: object
-      required: [title, body, reply_email]
-      properties:
-        title:
-          type: string
-        body:
-          type: string
-        reply_email:
-          type: string
-          description: 返信先メールアドレス (validate は usecase 層が担う)
-
-    SubmitInquiryResult:
-      description: "`POST /api/v1/inquiries` の出力。"
-      type: object
-      required: [inquiry_id]
-      properties:
-        inquiry_id:
-          type: integer
-          format: int64
-          x-go-name: InquiryID
 
     # ─── Enums (流出するもの) ──────────────────────────────────────────
     AnnouncementType:

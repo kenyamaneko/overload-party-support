@@ -22,9 +22,6 @@ type Server struct {
 
 	// GetAnnouncementFn は GET /api/v1/support/announcements/{announcementID}?lang=<code> の応答を決定する (nil は 404)。
 	GetAnnouncementFn func(announcementID int64, lang string) (int, any)
-
-	// SubmitInquiryFn は POST /api/v1/inquiries の応答を決定する (nil は 200 + 空 Response)。
-	SubmitInquiryFn func(req apisupport.SubmitInquiryRequest) (int, any)
 }
 
 // NewServer は起動済み Server を返す。テスト終了時に Close() すること。
@@ -33,7 +30,6 @@ func NewServer() *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/support/announcements", s.handleListAnnouncements)
 	mux.HandleFunc("GET /api/v1/support/announcements/{announcementID}", s.handleGetAnnouncement)
-	mux.HandleFunc("POST /api/v1/inquiries", s.handleSubmitInquiry)
 	s.srv = httptest.NewServer(mux)
 	return s
 }
@@ -76,22 +72,6 @@ func (s *Server) handleGetAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, body := fn(announcementID, lang)
-	writeJSON(w, status, body)
-}
-
-func (s *Server) handleSubmitInquiry(w http.ResponseWriter, r *http.Request) {
-	var req apisupport.SubmitInquiryRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-
-	s.mu.Lock()
-	fn := s.SubmitInquiryFn
-	s.mu.Unlock()
-
-	if fn == nil {
-		writeJSON(w, http.StatusOK, apisupport.SubmitInquiryResult{})
-		return
-	}
-	status, body := fn(req)
 	writeJSON(w, status, body)
 }
 
