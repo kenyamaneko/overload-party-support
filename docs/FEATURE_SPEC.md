@@ -17,9 +17,6 @@ support は以下の機能ドメインを所有する。
 |---|---|
 | お知らせ一覧取得 | 公開中のお知らせを多言語対応で返す |
 | お知らせ詳細取得 | 単一のお知らせを多言語対応で返す |
-| お知らせ管理 UI | 提供していない（「お知らせ管理 UI」参照） |
-| 問い合わせ受付 | 提供していない（「問い合わせ受付」参照） |
-| 問い合わせステータス管理 | 提供していない（「問い合わせステータス管理」参照） |
 
 support は **support スキーマの DB 行を唯一の真実とする**。お知らせのコンテンツは、以前 gateway が保持していた静的 JSON (`data/announcements.json`) を置き換える支配的情報源となる。
 
@@ -29,7 +26,7 @@ support は **support スキーマの DB 行を唯一の真実とする**。お�
 |---|---|---|---|
 | gateway 経由 `GET /api/v1/announcements`, `/api/v1/announcements/:id` | `:9009` | プレイヤー・クライアント向け読み取り | 不要（gateway 側も公開ルート） |
 
-お知らせの登録・更新は運用者が手作業で行い、問い合わせは外部フォームで受ける。管理機能と問い合わせは将来別サービスとして用意するため、以降の管理 UI・問い合わせに関する記述はその別サービスに引き継ぐ仕様として残す。
+お知らせの登録・更新は運用者が support データベースへ直接 SQL を実行して行う。問い合わせは外部フォームで受ける。
 
 ---
 
@@ -113,7 +110,7 @@ support は **support スキーマの DB 行を唯一の真実とする**。お�
 ### 仕様
 
 1. `lang` 必須。欠落は `ErrLangRequired`、対応外値は `ErrUnsupportedLang`
-2. 以下のいずれかなら `ErrAnnouncementNotFound`（404）:
+2. 以下のいずれかなら `ErrNotFound`（404）:
    - `announcementID` で記事行が存在しない
    - 指定 `lang` の翻訳行が存在しない
 3. **公開期間外の行も返す**（「公開期間外と下書きも返す理由」参照）。ただし `published_at IS NULL` の下書きも返す点に留意（ID を知る運営のプレビュー用途）
@@ -129,35 +126,7 @@ support は **support スキーマの DB 行を唯一の真実とする**。お�
 
 ---
 
-## お知らせ管理 UI
-
-管理 UI は提供していない。Cloud Run は 1 リビジョンにつき 1 ポートしか公開せず、認証を肩代わりしていた IAP も公開ロードバランサの廃止で無くなったため、到達させるには構成と認証を作り直す必要がある。お知らせの登録・更新は当面運用者の手作業とする。
-
-以下は、将来の管理サービスに引き継ぐ画面仕様として残す。運用者がお知らせの作成・編集・翻訳追加・公開制御を行う Web 画面を、FE 成果物を独立デプロイせず `html/template` + HTMX で動的レンダリングする（news サービスと同じパターン）。
-
-### 画面構成
-
-| 画面 / 操作 | パス | 機能 |
-|---|---|---|
-| お知らせ一覧 | `GET /admin/announcements` | 状態フィルタ付きの全お知らせ一覧（下書き・予約公開・公開中・期限切れを状態バッジで表示） |
-| 新規作成フォーム | `GET /admin/announcements/new` | 新規作成フォーム（type, published_at, expires_at, ja 翻訳を同一フォームで入力） |
-| 新規作成 (POST) | `POST /admin/announcements` | 「本体 CRUD」の仕様で本体 + ja 翻訳を INSERT |
-| 編集画面 | `GET /admin/announcements/:announcementId` | 編集画面（本体属性 + 言語タブ付き翻訳編集） |
-| 本体更新 | `POST /admin/announcements/:announcementId` | `type` / `published_at` / `expires_at` を更新 |
-| 削除 | `POST /admin/announcements/:announcementId/delete` | 記事行を削除（翻訳は FK CASCADE） |
-| 翻訳 upsert | `POST /admin/announcements/:announcementId/translations/:lang` | 「翻訳 upsert」の仕様で翻訳を INSERT / UPDATE |
-
-一覧画面には「+新規作成」ボタン、各行には編集・削除への動線を置く。編集画面の言語タブは `ja` / `en` の 2 タブ構成で、未作成の言語タブには空フォームを表示する。
-
-### アクセス制御
-
-- 管理 UI は **IAP (Identity-Aware Proxy) 背後にのみ露出** する（公開 API とは別ポート・別経路）
-- 認証は IAP が完結させる。support 側の責務は `X-Goog-Authenticated-User-Email` ヘッダの存在確認のみ
-- ヘッダが無いリクエストは middleware で `ErrMissingIAPHeader`（401）
-- 許可メールリストの管理は IAP 側で行う（support のデプロイ不要）
-- `ENV=local` では IAP middleware はパススルーする（local 開発で IAP を立てないため）
-
-### 公開状態の表現（下書きは `published_at = NULL`）
+## 公開状態の表現（下書きは `published_at = NULL`）
 
 お知らせは `status` 列を持たず、`published_at` と `expires_at` の組で公開状態を表現する:
 
@@ -170,155 +139,6 @@ support は **support スキーマの DB 行を唯一の真実とする**。お�
 
 下書き → 予約公開 → 公開中 → 期限切れの状態遷移は `published_at` / `expires_at` の更新だけで実現する。明示的な `publish` / `unpublish` API は持たない（運用上の混乱を招くため）。
 
-### 本体 CRUD
-
-| 操作 | 変更対象 | 入力 | 備考 |
-|---|---|---|---|
-| 新規作成 (`CreateAnnouncement`) | `announcements` 1 行 + ja 翻訳 1 行 | `type`, `published_at?`, `expires_at?`, `ja_title`, `ja_body` | 本体と ja 翻訳を **同一トランザクション** で INSERT |
-| 本体更新 (`UpdateAnnouncement`) | `announcements.type`, `published_at`, `expires_at` | 同上 | 翻訳は別エンドポイント（「翻訳 upsert」） |
-| 削除 (`DeleteAnnouncement`) | `announcements` 1 行（翻訳は FK CASCADE） | `announcementID` | |
-
-新規作成時に ja 翻訳を必須にするのは、「言語解決（フォールバックしない）」の運用契約「まず ja 翻訳を用意してから公開する」を DB レベルで支援するため。翻訳 0 件のお知らせが作られない状態を構造的に保証する。
-
-### 翻訳 upsert
-
-| 操作 | 変更対象 | 入力 |
-|---|---|---|
-| 翻訳 upsert (`UpsertAnnouncementTranslation`) | `announcement_translations` の `title` / `body` | `announcementID`, `lang`, `title`, `body` |
-
-既存なら UPDATE、未存在なら INSERT。ja 翻訳も en 翻訳も同じ口で更新する。記事本体の `updated_at` は動かさない（翻訳編集と本体更新を別監査対象として分離）。
-
-### バリデーション
-
-- `type`: 「お知らせ種別」の 4 種のいずれか。未知値は `ErrInvalidAnnouncementType`（400）
-- `lang`: 「多言語対応」の対応言語のいずれか。未知値は `ErrUnsupportedLang`（400）
-- `title`: 1 文字以上 200 文字以下。範囲外は `ErrInvalidField`（400）
-- `body`: 1 文字以上（上限なし）。空文字は `ErrInvalidField`
-- `published_at`: TIMESTAMPTZ または空（NULL）。過去日時も許容（即時公開として `now()` を明示的に設定する運用）
-- `expires_at`: TIMESTAMPTZ または空（NULL）。`published_at` との前後関係は DB レベルで強制しない（運用判断を許容）
-
-### 同時編集
-
-楽観ロックや競合検出は行わない。複数の運用者が同じお知らせを同時編集した場合は後勝ちで `updated_at` が最後の更新時刻になる。運用者数が少数前提（news と同じ判断）。
-
-副作用（Pub/Sub 等）は発生しない。
-
----
-
-## 問い合わせ受付 (`SubmitInquiry`)
-
-問い合わせ受付は提供していない。到達させるには Cloud Run の 1 ポート制約の下で公開経路を作り直す必要があり、問い合わせは当面 Google フォームなどの外部フォームで受ける。将来は問い合わせを別サービスとして用意する。
-
-以下は、その別サービスに引き継ぐ仕様として残す。
-
-**入力**: `title`, `body`, `replyEmail`
-**出力**: `error`
-
-問い合わせ本体は多言語対応しない（言語不問）。受付確認メールのテンプレートは日本語固定。
-
-### バリデーションと副作用順序（fail-fast）
-
-以下の順で処理し、失敗時点で即 return する。順序自体が仕様。
-
-1. **必須フィールド**: `title`, `body`, `replyEmail` のいずれかが空なら `ErrInvalidInquiry`
-2. **長さ上限**: `title` は 100 文字、`body` は 4000 文字を超えたら `ErrInvalidInquiry`（自動切り詰めは行わない）
-3. **email 形式**: `replyEmail` が RFC 5322 準拠で解釈できなければ `ErrInvalidEmail`
-4. **DB 書き込み**: `support.inquiries` に `status = new` で INSERT
-5. **Slack 通知**: 「受付時の通知」に従い運営チャンネルへ通知を送る
-6. **受付確認メール送信**: 「受付確認メール (auto-reply)」に従い SendGrid 経由で `replyEmail` 宛に自動返信する
-
-### 受付確認メール (auto-reply)
-
-DB 書き込み成功後、SendGrid 経由で `replyEmail` 宛に以下を含む受付確認メールを送る:
-
-- 問い合わせ ID
-- 受付日時
-- 件名 (`title`) と本文 (`body`) のサマリ
-- 「担当者から改めてご連絡します」旨の定型文
-
-テンプレートは日本語固定。件名・本文は support 内の `html/template` で組み立て、SendGrid Go SDK の `Mail` オブジェクトに渡す（プロバイダ差し替え時は `port.EmailSender` の adapter を付け替えるだけで済む）。from アドレス・差出人名は環境変数で外出し可能とする。
-
-### 副作用失敗時の扱い
-
-Slack 通知と SendGrid 送信は **DB COMMIT 後** に「バリデーションと副作用順序（fail-fast）」の順序で逐次実行する。いずれかが失敗した時点で即 return し、呼び出し元にエラーを返す（CLAUDE.md「握りつぶし禁止」）。
-
-- Slack 通知が成功し SendGrid が失敗した場合: 運営側には ticket が見えるので、運営が Slack 経由で再送指示 or 手動返信する
-- Slack 通知が失敗した場合: DB には行が残るため、「管理経路」の管理 UI で未通知分を発見・救済できる
-
-フォーム側のリトライは「冪等性の非保証」の通り冪等性を保証しない。
-
-### 冪等性の非保証
-
-問い合わせには purchaseToken のような外部識別子が存在しないため、**完全な冪等性は保証しない**。同一内容の問い合わせが短時間に複数登録された場合は運営側で Slack 上手動でマージする運用とする。フォーム側の二重送信防止はクライアント責務。
-
-### 認証と公開面
-
-このエンドポイントは **gateway を経由しない外部から呼ばれる**（問い合わせフォームからの直接アクセス）。認証は掛けない。ゲストユーザーも問い合わせ可能。
-
-レート制限・CAPTCHA 等のスパム対策は優先度低の将来課題とし、現時点では仕様に含めない。ただし auto-reply を実装する以上、攻撃者が第三者のメールアドレスを `replyEmail` に詐称すると受付確認メールが第三者へ届くことになる。内容は無害だが将来の CAPTCHA 検討材料とする。
-
----
-
-## 問い合わせステータス管理
-
-問い合わせを受け付けていないため、ステータス管理も提供していない。以下は、問い合わせを引き継ぐ別サービスの仕様として残す。
-
-support は問い合わせの対応ステータスと対応メモを内部で保持し、Slack 連携から照会・更新される。
-
-### ステータス遷移
-
-| Status | 意味 | 遷移先 |
-|---|---|---|
-| `new` | 受付直後、未着手 | `in_progress`, `closed` |
-| `in_progress` | 運営が対応中 | `closed` |
-| `closed` | クローズ（返信完了・返信不要・スパム等） | ― |
-
-`closed` からの逆遷移は許容せず `ErrInvalidStatusTransition` を返す。再オープンが必要な事案は新規 inquiry として起票する運用とする。
-
-`closed` は「返信完了」「返信不要（スパム等）」の両方を内包する終端状態。両者の区別が事後的に必要になった場合は「対応メモ (`internal_note`)」に記録するか、専用列 (`closed_reason`) を追加する。
-
-ステータス更新は手動のみ。SendGrid の送信結果や Gmail などから自動遷移させる仕組みは持たない。自動化は外部メール連携コストに見合わないため。
-
-### 対応メモ (`internal_note`)
-
-問い合わせに 1:1 で紐づく運営向け自由記述メモ。用途:
-
-- 対応の経緯・判断根拠の記録（Slack スレッドを漁らずに済ませる）
-- 引き継ぎ時のコンテキスト共有
-- `closed` の理由（返信完了 / スパム等）
-
-メモは運営のみが読み書きでき、プレイヤーからは参照されない。個人情報が混入しうるため、DB 暗号化・アクセス制御は [DATA_DESIGN.md](DATA_DESIGN.md) / [ARCHITECTURE.md](ARCHITECTURE.md) で別途定義する。
-
-### 管理経路
-
-問い合わせの一覧・詳細・ステータス更新・対応メモ更新は **管理 UI** から運用者が行う。管理 UI は IAP の背後にあり、運用者ブラウザのみがアクセス可能。
-
-一覧は `updated_at DESC` で並べる（`created_at` ではない）。受付直後は `created_at = updated_at` なので新着もトップに出る一方、古い問い合わせでもステータスや対応メモの更新があれば上位に浮上し、運営が直近動かした案件を見失わない。
-
-ステータス更新は `in_progress` / `closed` のみ受け付ける。`new` は受付時にサーバが一度だけセットする初期値で、API 経由では遷移先に指定できない。**返信文面は support では管理しない**（運営が Slack の通知と管理 UI の詳細を元にメールで返信し、その結果を `closed` として記録するのみ）。
-
-### プレイヤー向け履歴 API を提供しない
-
-プレイヤーが自身の問い合わせ履歴を閲覧する API は提供しない。返答はすべて `replyEmail` 宛のメールで行う。
-
----
-
-## Slack 連携
-
-support は問い合わせ受付の **一方向通知** にのみ Slack を使う。Slack workspace・チャンネル ID・bot token は support 自身が Secret Manager から取得し、外部サービスに依存しない。
-
-### 受付時の通知
-
-`SubmitInquiry` 成功時、運営チャンネル（環境変数で指定）に以下を投稿する:
-
-- 問い合わせ ID
-- 件名 (`title`)
-- 本文抜粋 (`body` の先頭 200 文字、env で可変)
-- 返信先メールアドレス (`replyEmail`)
-- 管理 UI へのリンク（`/admin/inquiries/:id`）
-
-通知は read-only で、対応操作は管理 UI 側で行う。support 自身は Slack の interactive payload を解釈しない。
-
 ---
 
 ## エラーセマンティクス
@@ -329,16 +149,15 @@ usecase 層は HTTP ステータスを知らない。エラーはセンチネル
 
 | 分類関数 | 対象エラー | 用途 |
 |---|---|---|
-| `IsNotFound` | `ErrAnnouncementNotFound` | 404 |
-| `IsValidation` | `ErrInvalidInquiry`, `ErrInvalidEmail`, `ErrLangRequired`, `ErrUnsupportedLang`, `ErrInvalidAnnouncementType`, `ErrInvalidField` | 400 |
-| `IsUnauthorized` | `ErrMissingIAPHeader` | 401（管理 UI のみ） |
+| `IsNotFound` | `ErrNotFound` | 404 |
+| `IsValidation` | `ErrLangRequired`, `ErrUnsupportedLang` | 400 |
 
 ### 握りつぶし禁止
 
-Slack 通知失敗・SendGrid 送信失敗・DB エラーをログのみで握りつぶしてはならない。すべて呼び出し元に返す（CLAUDE.md「設計思想」参照）。
+DB エラーをログのみで握りつぶしてはならない。すべて呼び出し元に返す（CLAUDE.md「設計思想」参照）。
 
 ---
 
 ## イベント発行
 
-support は Pub/Sub イベント発行を **行わない**。他サービスとの状態同期が不要（お知らせはプル型、問い合わせは Slack 通知 + 管理 UI で運用が完結する）なため。将来イベント化が必要になった場合は shop と同じ Transactional Outbox パターンを導入する。
+support は Pub/Sub イベント発行を **行わない**。他サービスとの状態同期が不要（お知らせはプル型で配信する）なため。将来イベント化が必要になった場合は shop と同じ Transactional Outbox パターンを導入する。
