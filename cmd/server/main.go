@@ -53,7 +53,6 @@ func run() error {
 	announcementUsecase := announcement.New(announcementRepo, time.Now)
 	announcementH := rest.NewAnnouncementHandler(announcementUsecase)
 
-	// お知らせ管理と問い合わせ受付を support の外に移したため、管理 UI と問い合わせフォームのサーバは起動しない。
 	internalSrv := &http.Server{
 		Handler:           router.NewInternal(announcementH),
 		ReadHeaderTimeout: 10 * time.Second,
