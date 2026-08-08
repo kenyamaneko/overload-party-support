@@ -79,7 +79,7 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 <!-- END GENERATED: inquiries -->
 
 **設計判断:**
-- 問い合わせと対応履歴を別テーブルにしない。1 件の問い合わせに対する履歴は状態遷移のみで、1:N の詳細対応ログは持たない。詳細な対応経緯は `internal_note` に自由記述するか Slack 側で管理する前提
+- 問い合わせと対応履歴を別テーブルにしない。1 件の問い合わせに対する履歴は状態遷移のみで、1:N の詳細対応ログは持たない。詳細な対応経緯は `internal_note` に自由記述する
 - `status` の許容値は CHECK 制約で DB 層でも強制。アプリ側のバグで不正値が混入する経路を構造的に塞ぐ
 - `reply_email` にインデックスは張らない。同一メールアドレスでの過去履歴検索要件が生じた段階で追加検討
 
@@ -106,10 +106,8 @@ Support はクロススキーマ参照を持たず、他スキーマ由来の re
 | テーブル | インデックス | 用途 |
 |---|---|---|
 | `announcements` | partial `(published_at DESC, announcement_id DESC) WHERE published_at IS NOT NULL` | 公開 API 一覧取得（下書きを索引に載せない） |
-| `inquiries` | `(status, updated_at DESC)` | Slack での未対応・対応中一覧取得 |
+| `inquiries` | `(status, updated_at DESC)` | ステータス別の一覧抽出 |
 
-お知らせ公開 API のクエリは `published_at IS NOT NULL AND published_at <= now AND (expires_at IS NULL OR now < expires_at)` でフィルタするため、部分インデックスで下書き行 (`published_at IS NULL`) を除外する。管理 UI 向け一覧（下書きを含む全件表示）は別パスで、PK 走査 + 全件スキャンで十分。
+お知らせ公開 API のクエリは `published_at IS NOT NULL AND published_at <= now AND (expires_at IS NULL OR now < expires_at)` でフィルタするため、部分インデックスで下書き行 (`published_at IS NULL`) を除外する。
 
-一覧の並び順に `updated_at DESC` を採用する理由: 受付直後は `created_at = updated_at` なので新着も先頭に出る。古い問い合わせでもステータス遷移や対応メモ更新があれば上位に浮上し、運営が直近動かした案件を見失わない。`created_at` 基準だと何日も前に受けた案件が対応中でも下に沈む。
-
-他のクエリパスは PK 走査で十分。問い合わせ件数は数千件 / 月オーダーを想定し、全走査でも許容できる前提。スケールが変われば `reply_email` / `created_at` 単独インデックス追加を再検討する。
+他のクエリパスは PK 走査で十分。

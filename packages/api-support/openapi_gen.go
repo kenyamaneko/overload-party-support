@@ -4,7 +4,6 @@
 package apisupport
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -77,20 +76,6 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-// SubmitInquiryRequest `POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。
-type SubmitInquiryRequest struct {
-	Body string `json:"body"`
-
-	// ReplyEmail 返信先メールアドレス (validate は usecase 層が担う)
-	ReplyEmail string `json:"reply_email"`
-	Title      string `json:"title"`
-}
-
-// SubmitInquiryResult `POST /api/v1/inquiries` の出力。
-type SubmitInquiryResult struct {
-	InquiryID int64 `json:"inquiry_id"`
-}
-
 // AnnouncementIdPath defines model for AnnouncementIdPath.
 type AnnouncementIdPath = int64
 
@@ -110,9 +95,6 @@ type GetAnnouncementParams struct {
 	// (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
 	Lang LangQuery `form:"lang" json:"lang"`
 }
-
-// SubmitInquiryJSONRequestBody defines body for SubmitInquiry for application/json ContentType.
-type SubmitInquiryJSONRequestBody = SubmitInquiryRequest
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -187,11 +169,6 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// SubmitInquiryWithBody request with any body
-	SubmitInquiryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	SubmitInquiry(ctx context.Context, body SubmitInquiryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListAnnouncements request
 	ListAnnouncements(ctx context.Context, params *ListAnnouncementsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -200,30 +177,6 @@ type ClientInterface interface {
 
 	// GetHealth request
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-func (c *Client) SubmitInquiryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSubmitInquiryRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SubmitInquiry(ctx context.Context, body SubmitInquiryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSubmitInquiryRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
 }
 
 func (c *Client) ListAnnouncements(ctx context.Context, params *ListAnnouncementsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -260,46 +213,6 @@ func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (
 		return nil, err
 	}
 	return c.Client.Do(req)
-}
-
-// NewSubmitInquiryRequest calls the generic SubmitInquiry builder with application/json body
-func NewSubmitInquiryRequest(server string, body SubmitInquiryJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewSubmitInquiryRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewSubmitInquiryRequestWithBody generates requests for SubmitInquiry with any type of body
-func NewSubmitInquiryRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/inquiries")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
 }
 
 // NewListAnnouncementsRequest generates requests for ListAnnouncements
@@ -479,11 +392,6 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// SubmitInquiryWithBodyWithResponse request with any body
-	SubmitInquiryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitInquiryResponse, error)
-
-	SubmitInquiryWithResponse(ctx context.Context, body SubmitInquiryJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitInquiryResponse, error)
-
 	// ListAnnouncementsWithResponse request
 	ListAnnouncementsWithResponse(ctx context.Context, params *ListAnnouncementsParams, reqEditors ...RequestEditorFn) (*ListAnnouncementsResponse, error)
 
@@ -492,36 +400,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetHealthWithResponse request
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
-}
-
-type SubmitInquiryResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SubmitInquiryResult
-}
-
-// Status returns HTTPResponse.Status
-func (r SubmitInquiryResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r SubmitInquiryResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r SubmitInquiryResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
 }
 
 type ListAnnouncementsResponse struct {
@@ -614,23 +492,6 @@ func (r GetHealthResponse) ContentType() string {
 	return ""
 }
 
-// SubmitInquiryWithBodyWithResponse request with arbitrary body returning *SubmitInquiryResponse
-func (c *ClientWithResponses) SubmitInquiryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitInquiryResponse, error) {
-	rsp, err := c.SubmitInquiryWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSubmitInquiryResponse(rsp)
-}
-
-func (c *ClientWithResponses) SubmitInquiryWithResponse(ctx context.Context, body SubmitInquiryJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitInquiryResponse, error) {
-	rsp, err := c.SubmitInquiry(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSubmitInquiryResponse(rsp)
-}
-
 // ListAnnouncementsWithResponse request returning *ListAnnouncementsResponse
 func (c *ClientWithResponses) ListAnnouncementsWithResponse(ctx context.Context, params *ListAnnouncementsParams, reqEditors ...RequestEditorFn) (*ListAnnouncementsResponse, error) {
 	rsp, err := c.ListAnnouncements(ctx, params, reqEditors...)
@@ -656,32 +517,6 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 		return nil, err
 	}
 	return ParseGetHealthResponse(rsp)
-}
-
-// ParseSubmitInquiryResponse parses an HTTP response from a SubmitInquiryWithResponse call
-func ParseSubmitInquiryResponse(rsp *http.Response) (*SubmitInquiryResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &SubmitInquiryResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest SubmitInquiryResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
 }
 
 // ParseListAnnouncementsResponse parses an HTTP response from a ListAnnouncementsWithResponse call

@@ -30,75 +30,48 @@ func newAnnouncementRepo(t *testing.T) *postgres.AnnouncementRepository {
 	return postgres.NewAnnouncementRepository(sharedPG.Pool)
 }
 
-// jaTr は ja 1 件のみの翻訳スライス (多くの seed で使うのでヘルパー化)。
-func jaTr(title, body string) []domain.TranslationInput {
-	return []domain.TranslationInput{{Lang: domain.LangJa, Title: title, Body: body}}
+// translationSeed は SQL 直挿しフィクスチャの翻訳 1 件分。
+type translationSeed struct {
+	lang  string
+	title string
+	body  string
 }
 
-func TestCreate(t *testing.T) {
-	t.Run("告知の作成", func(t *testing.T) {
-		past := fixedNow.Add(-time.Hour)
+// jaSeed は ja 1 件のみの翻訳シード (多くの seed で使うのでヘルパー化)。
+func jaSeed(title, body string) []translationSeed {
+	return []translationSeed{{lang: domain.LangJa, title: title, body: body}}
+}
 
-		// repo はロジックを持たず素通すため、ja 必須などの業務制約 (usecase の責務) は課さず翻訳 0 件でも本体行を作る。
-		cases := []struct {
-			name            string
-			params          domain.CreateAnnouncementParams
-			wantTitleByLang map[string]string
-		}{
-			{
-				name: "翻訳が0件でも本体行が作られる",
-				params: domain.CreateAnnouncementParams{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &past,
-					Translations: nil,
-				},
-				wantTitleByLang: map[string]string{},
-			},
-			{
-				name: "jaのみのとき、ja翻訳が保存される",
-				params: domain.CreateAnnouncementParams{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &past,
-					Translations: jaTr("T", "B"),
-				},
-				wantTitleByLang: map[string]string{domain.LangJa: "T"},
-			},
-			{
-				name: "jaとenのとき、両翻訳が同一txで保存される",
-				params: domain.CreateAnnouncementParams{
-					Type:        domain.TypeInfo,
-					PublishedAt: &past,
-					Translations: []domain.TranslationInput{
-						{Lang: domain.LangJa, Title: "T-ja", Body: "B-ja"},
-						{Lang: domain.LangEn, Title: "T-en", Body: "B-en"},
-					},
-				},
-				wantTitleByLang: map[string]string{domain.LangJa: "T-ja", domain.LangEn: "T-en"},
-			},
-		}
+// insertAnnouncement は support.announcements + announcement_translations へ直接 INSERT し、採番された announcement_id を返す。
+func insertAnnouncement(t *testing.T, typ string, publishedAt, expiresAt *time.Time, translations []translationSeed) int64 {
+	t.Helper()
+	ctx := context.Background()
 
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := newAnnouncementRepo(t)
-				ctx := context.Background()
+	var id int64
+	require.NoError(t, sharedPG.Pool.QueryRow(ctx,
+		`INSERT INTO support.announcements (type, published_at, expires_at)
+		 VALUES ($1, $2, $3)
+		 RETURNING announcement_id`,
+		typ, publishedAt, expiresAt,
+	).Scan(&id))
 
-				id, err := repo.Create(ctx, tc.params)
-				require.NoError(t, err)
-				assert.Greater(t, id, int64(0))
+	for _, tr := range translations {
+		_, err := sharedPG.Pool.Exec(ctx,
+			`INSERT INTO support.announcement_translations (announcement_id, lang, title, body)
+			 VALUES ($1, $2, $3, $4)`,
+			id, tr.lang, tr.title, tr.body,
+		)
+		require.NoError(t, err)
+	}
+	return id
+}
 
-				aw, err := repo.GetWithTranslations(ctx, id)
-				require.NoError(t, err)
-				require.NotNil(t, aw)
-				assert.Equal(t, tc.params.Type, aw.Announcement.Type)
-
-				gotTitleByLang := make(map[string]string, len(aw.Translations))
-				for _, tr := range aw.Translations {
-					gotTitleByLang[tr.Lang] = tr.Title
-				}
-				assert.Equal(t, tc.wantTitleByLang, gotTitleByLang)
-			})
-		}
-	})
+// announcementSeed は複数件を一括で INSERT するときの 1 件分。
+type announcementSeed struct {
+	typ          string
+	publishedAt  *time.Time
+	expiresAt    *time.Time
+	translations []translationSeed
 }
 
 func TestListPublished(t *testing.T) {
@@ -111,57 +84,56 @@ func TestListPublished(t *testing.T) {
 			future := fixedNow.Add(24 * time.Hour)
 			farPast := fixedNow.Add(-48 * time.Hour)
 
-			seeds := []domain.CreateAnnouncementParams{
+			seeds := []announcementSeed{
 				{
-					Type:        domain.TypeInfo,
-					PublishedAt: &past,
-					Translations: []domain.TranslationInput{
-						{Lang: domain.LangJa, Title: "published_at<=now (ja+en)", Body: "B"},
-						{Lang: domain.LangEn, Title: "published_at<=now (ja+en) [en]", Body: "B-en"},
+					typ:         domain.TypeInfo,
+					publishedAt: &past,
+					translations: []translationSeed{
+						{lang: domain.LangJa, title: "published_at<=now (ja+en)", body: "B"},
+						{lang: domain.LangEn, title: "published_at<=now (ja+en) [en]", body: "B-en"},
 					},
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  nil,
-					Translations: jaTr("published_at=NULL", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  nil,
+					translations: jaSeed("published_at=NULL", "B"),
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &future,
-					Translations: jaTr("published_at>now", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  &future,
+					translations: jaSeed("published_at>now", "B"),
 				},
 				{
-					Type:         domain.TypeEvent,
-					PublishedAt:  &farPast,
-					ExpiresAt:    &past,
-					Translations: jaTr("expires_at<=now", "B"),
+					typ:          domain.TypeEvent,
+					publishedAt:  &farPast,
+					expiresAt:    &past,
+					translations: jaSeed("expires_at<=now", "B"),
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &past,
-					ExpiresAt:    &future,
-					Translations: jaTr("expires_at>now", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  &past,
+					expiresAt:    &future,
+					translations: jaSeed("expires_at>now", "B"),
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &past,
-					Translations: jaTr("published_at<=now (ja only)", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  &past,
+					translations: jaSeed("published_at<=now (ja only)", "B"),
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &fixedNow,
-					Translations: jaTr("published_at==now", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  &fixedNow,
+					translations: jaSeed("published_at==now", "B"),
 				},
 				{
-					Type:         domain.TypeInfo,
-					PublishedAt:  &farPast,
-					ExpiresAt:    &fixedNow,
-					Translations: jaTr("expires_at==now", "B"),
+					typ:          domain.TypeInfo,
+					publishedAt:  &farPast,
+					expiresAt:    &fixedNow,
+					translations: jaSeed("expires_at==now", "B"),
 				},
 			}
-			for _, p := range seeds {
-				_, err := repo.Create(ctx, p)
-				require.NoError(t, err)
+			for _, s := range seeds {
+				insertAnnouncement(t, s.typ, s.publishedAt, s.expiresAt, s.translations)
 			}
 
 			cases := []struct {
@@ -220,16 +192,10 @@ func TestListPublished(t *testing.T) {
 			t2 := fixedNow.Add(-2 * time.Hour)
 			t3 := fixedNow.Add(-1 * time.Hour)
 
-			mustCreate := func(p domain.CreateAnnouncementParams) int64 {
-				t.Helper()
-				id, err := repo.Create(ctx, p)
-				require.NoError(t, err)
-				return id
-			}
-			id1a := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1a", "B")})
-			id1b := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t1, Translations: jaTr("1b", "B")})
-			id2 := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t2, Translations: jaTr("2", "B")})
-			id3 := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &t3, Translations: jaTr("3", "B")})
+			id1a := insertAnnouncement(t, domain.TypeInfo, &t1, nil, jaSeed("1a", "B"))
+			id1b := insertAnnouncement(t, domain.TypeInfo, &t1, nil, jaSeed("1b", "B"))
+			id2 := insertAnnouncement(t, domain.TypeInfo, &t2, nil, jaSeed("2", "B"))
+			id3 := insertAnnouncement(t, domain.TypeInfo, &t3, nil, jaSeed("3", "B"))
 
 			items, err := repo.ListPublished(ctx, domain.LangJa, fixedNow)
 			require.NoError(t, err)
@@ -238,96 +204,6 @@ func TestListPublished(t *testing.T) {
 			gotIDs := []int64{items[0].AnnouncementID, items[1].AnnouncementID, items[2].AnnouncementID, items[3].AnnouncementID}
 			assert.Equal(t, []int64{id3, id2, id1b, id1a}, gotIDs)
 		})
-	})
-}
-
-func TestList(t *testing.T) {
-	t.Run("stateによる絞り込み一覧", func(t *testing.T) {
-		draft := domain.StateDraft
-		scheduled := domain.StateScheduled
-		published := domain.StatePublished
-		expired := domain.StateExpired
-
-		repo := newAnnouncementRepo(t)
-		ctx := context.Background()
-
-		past := fixedNow.Add(-time.Hour)
-		future := fixedNow.Add(time.Hour)
-		farPast := fixedNow.Add(-48 * time.Hour)
-
-		seeds := []domain.CreateAnnouncementParams{
-			{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("draft", "B")},
-			{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("scheduled", "B")},
-			{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("published", "B")},
-			{Type: domain.TypeEvent, PublishedAt: &farPast, ExpiresAt: &past, Translations: jaTr("expired", "B")},
-			{Type: domain.TypeInfo, PublishedAt: nil, ExpiresAt: &past, Translations: jaTr("draft with past expires", "B")},
-			{Type: domain.TypeInfo, PublishedAt: &fixedNow, Translations: jaTr("published_at==now", "B")},
-			{Type: domain.TypeInfo, PublishedAt: &farPast, ExpiresAt: &fixedNow, Translations: jaTr("expires_at==now", "B")},
-		}
-		for _, p := range seeds {
-			_, err := repo.Create(ctx, p)
-			require.NoError(t, err)
-		}
-
-		cases := []struct {
-			name       string
-			state      *string
-			wantTitles []string
-		}{
-			{
-				name:  "state=nilのとき、全件を返す",
-				state: nil,
-				wantTitles: []string{
-					"draft", "scheduled", "published", "expired", "draft with past expires",
-					"published_at==now", "expires_at==now",
-				},
-			},
-			{
-				name:       "state=Draftのとき、PublishedAt IS NULLの2件を返す (expires_atの値に依存しない)",
-				state:      &draft,
-				wantTitles: []string{"draft", "draft with past expires"},
-			},
-			{
-				name:       "state=Scheduledのとき、公開時刻が現在時刻より未来の1件を返す (公開時刻が現在時刻と等しい行は含まない)",
-				state:      &scheduled,
-				wantTitles: []string{"scheduled"},
-			},
-			{
-				name:       "state=Publishedのとき、公開時刻到達済みかつ未失効の行を返す (公開時刻が現在時刻と等しい行を含み、失効時刻が現在時刻と等しい行は含まない)",
-				state:      &published,
-				wantTitles: []string{"published", "published_at==now"},
-			},
-			{
-				name:       "state=Expiredのとき、公開時刻が過去かつ失効時刻が過去以下の行を返す (失効時刻が現在時刻と等しい行を含む、下書き系は含まない)",
-				state:      &expired,
-				wantTitles: []string{"expired", "expires_at==now"},
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				items, err := repo.List(ctx, tc.state, fixedNow)
-				require.NoError(t, err)
-
-				titles := make([]string, 0, len(items))
-				for _, it := range items {
-					for _, tr := range it.Translations {
-						titles = append(titles, tr.Title)
-					}
-				}
-				assert.ElementsMatch(t, tc.wantTitles, titles)
-			})
-		}
-	})
-
-	t.Run("告知が1件も無いとき、nilでなく長さ0の一覧が返る", func(t *testing.T) {
-		repo := newAnnouncementRepo(t)
-		ctx := context.Background()
-
-		items, err := repo.List(ctx, nil, fixedNow)
-		require.NoError(t, err)
-		assert.NotNil(t, items)
-		assert.Empty(t, items)
 	})
 }
 
@@ -341,15 +217,9 @@ func TestGetPublishedDetail(t *testing.T) {
 			past := fixedNow.Add(-time.Hour)
 			future := fixedNow.Add(time.Hour)
 
-			mustCreate := func(p domain.CreateAnnouncementParams) int64 {
-				t.Helper()
-				id, err := repo.Create(ctx, p)
-				require.NoError(t, err)
-				return id
-			}
-			pastID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("past", "B-past")})
-			nullID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: nil, Translations: jaTr("null", "B-null")})
-			futureID := mustCreate(domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &future, Translations: jaTr("future", "B-future")})
+			pastID := insertAnnouncement(t, domain.TypeInfo, &past, nil, jaSeed("past", "B-past"))
+			nullID := insertAnnouncement(t, domain.TypeInfo, nil, nil, jaSeed("null", "B-null"))
+			futureID := insertAnnouncement(t, domain.TypeInfo, &future, nil, jaSeed("future", "B-future"))
 
 			cases := []struct {
 				name     string
@@ -388,8 +258,7 @@ func TestGetPublishedDetail(t *testing.T) {
 			ctx := context.Background()
 
 			past := fixedNow.Add(-time.Hour)
-			jaOnlyID, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, PublishedAt: &past, Translations: jaTr("ja only", "B")})
-			require.NoError(t, err)
+			jaOnlyID := insertAnnouncement(t, domain.TypeInfo, &past, nil, jaSeed("ja only", "B"))
 
 			cases := []struct {
 				name string
@@ -416,189 +285,5 @@ func TestGetPublishedDetail(t *testing.T) {
 				})
 			}
 		})
-	})
-}
-
-func TestUpdate(t *testing.T) {
-	t.Run("告知の更新", func(t *testing.T) {
-		t.Run("本体属性 (type / published_at)が更新される", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
-			newTime := fixedNow.Add(time.Hour)
-
-			id, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, Translations: jaTr("T", "B")})
-			require.NoError(t, err)
-
-			require.NoError(t, repo.Update(ctx, id, domain.UpdateAnnouncementParams{
-				Type:        domain.TypeEvent,
-				PublishedAt: &newTime,
-			}))
-
-			aw, err := repo.GetWithTranslations(ctx, id)
-			require.NoError(t, err)
-			assert.Equal(t, domain.TypeEvent, aw.Announcement.Type)
-			require.NotNil(t, aw.Announcement.PublishedAt)
-			assert.True(t, newTime.Equal(*aw.Announcement.PublishedAt), "want=%v got=%v", newTime, *aw.Announcement.PublishedAt)
-		})
-
-		t.Run("未存在IDのとき、port.ErrNotFoundになる", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
-
-			err := repo.Update(ctx, 999999, domain.UpdateAnnouncementParams{Type: domain.TypeInfo})
-			assert.ErrorIs(t, err, port.ErrNotFound)
-		})
-	})
-}
-
-func TestUpsertTranslation(t *testing.T) {
-	t.Run("翻訳のUPSERT", func(t *testing.T) {
-		// 対象 (announcement_id, lang) の 1 行のみを変更し、他 lang 行には触れないことを確かめる。
-		cases := []struct {
-			name            string
-			seed            []domain.TranslationInput
-			upsertLang      string
-			upsertTitle     string
-			upsertBody      string
-			wantTitleByLang map[string]string
-			wantBodyByLang  map[string]string
-		}{
-			{
-				name:        "jaのみの状態にenを追加するとき (INSERT)、ja行は変わらない",
-				seed:        jaTr("T-ja-v1", "B-ja-v1"),
-				upsertLang:  domain.LangEn,
-				upsertTitle: "T-en-v1",
-				upsertBody:  "B-en-v1",
-				wantTitleByLang: map[string]string{
-					domain.LangJa: "T-ja-v1",
-					domain.LangEn: "T-en-v1",
-				},
-				wantBodyByLang: map[string]string{
-					domain.LangJa: "B-ja-v1",
-					domain.LangEn: "B-en-v1",
-				},
-			},
-			{
-				name: "enを更新するとき (UPDATE)、ja行はv1のまま",
-				seed: []domain.TranslationInput{
-					{Lang: domain.LangJa, Title: "T-ja-v1", Body: "B-ja-v1"},
-					{Lang: domain.LangEn, Title: "T-en-v1", Body: "B-en-v1"},
-				},
-				upsertLang:  domain.LangEn,
-				upsertTitle: "T-en-v2",
-				upsertBody:  "B-en-v2",
-				wantTitleByLang: map[string]string{
-					domain.LangJa: "T-ja-v1",
-					domain.LangEn: "T-en-v2",
-				},
-				wantBodyByLang: map[string]string{
-					domain.LangJa: "B-ja-v1",
-					domain.LangEn: "B-en-v2",
-				},
-			},
-			{
-				name: "jaを更新するとき (UPDATE)、en行はv1のまま",
-				seed: []domain.TranslationInput{
-					{Lang: domain.LangJa, Title: "T-ja-v1", Body: "B-ja-v1"},
-					{Lang: domain.LangEn, Title: "T-en-v1", Body: "B-en-v1"},
-				},
-				upsertLang:  domain.LangJa,
-				upsertTitle: "T-ja-v2",
-				upsertBody:  "B-ja-v2",
-				wantTitleByLang: map[string]string{
-					domain.LangJa: "T-ja-v2",
-					domain.LangEn: "T-en-v1",
-				},
-				wantBodyByLang: map[string]string{
-					domain.LangJa: "B-ja-v2",
-					domain.LangEn: "B-en-v1",
-				},
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := newAnnouncementRepo(t)
-				ctx := context.Background()
-
-				id, err := repo.Create(ctx, domain.CreateAnnouncementParams{
-					Type:         domain.TypeInfo,
-					Translations: tc.seed,
-				})
-				require.NoError(t, err)
-
-				require.NoError(t, repo.UpsertTranslation(ctx, id, tc.upsertLang, tc.upsertTitle, tc.upsertBody))
-
-				aw, err := repo.GetWithTranslations(ctx, id)
-				require.NoError(t, err)
-
-				gotTitleByLang := make(map[string]string, len(aw.Translations))
-				gotBodyByLang := make(map[string]string, len(aw.Translations))
-				for _, tr := range aw.Translations {
-					gotTitleByLang[tr.Lang] = tr.Title
-					gotBodyByLang[tr.Lang] = tr.Body
-				}
-				assert.Equal(t, tc.wantTitleByLang, gotTitleByLang)
-				assert.Equal(t, tc.wantBodyByLang, gotBodyByLang)
-			})
-		}
-
-		t.Run("親記事が無いとき、port.ErrNotFoundになる", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
-
-			err := repo.UpsertTranslation(ctx, 999999, domain.LangJa, "T", "B")
-			assert.ErrorIs(t, err, port.ErrNotFound)
-		})
-	})
-}
-
-func TestDelete(t *testing.T) {
-	t.Run("告知の削除", func(t *testing.T) {
-		t.Run("削除すると翻訳行もFK CASCADEで同時に削除される", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
-
-			id, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, Translations: jaTr("T", "B")})
-			require.NoError(t, err)
-			require.NoError(t, repo.UpsertTranslation(ctx, id, domain.LangEn, "T", "B"))
-
-			require.NoError(t, repo.Delete(ctx, id))
-
-			_, err = repo.GetWithTranslations(ctx, id)
-			assert.ErrorIs(t, err, port.ErrNotFound)
-		})
-
-		cases := []struct {
-			name  string
-			setup func(t *testing.T, repo *postgres.AnnouncementRepository, ctx context.Context) int64
-		}{
-			{
-				name: "未存在IDのとき、port.ErrNotFoundになる",
-				setup: func(_ *testing.T, _ *postgres.AnnouncementRepository, _ context.Context) int64 {
-					return 999999
-				},
-			},
-			{
-				name: "一度削除済みのIDを再度削除するとき、port.ErrNotFoundになる",
-				setup: func(t *testing.T, repo *postgres.AnnouncementRepository, ctx context.Context) int64 {
-					id, err := repo.Create(ctx, domain.CreateAnnouncementParams{Type: domain.TypeInfo, Translations: jaTr("T", "B")})
-					require.NoError(t, err)
-					require.NoError(t, repo.Delete(ctx, id))
-					return id
-				},
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := newAnnouncementRepo(t)
-				ctx := context.Background()
-				id := tc.setup(t, repo, ctx)
-
-				err := repo.Delete(ctx, id)
-				assert.ErrorIs(t, err, port.ErrNotFound)
-			})
-		}
 	})
 }

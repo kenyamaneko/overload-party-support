@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_announcements_published
     ON support.announcements (published_at DESC, announcement_id DESC)
     WHERE published_at IS NOT NULL;
 
--- Slack での未対応・対応中一覧取得用: status フィルタ + updated_at DESC
+-- ステータス別の一覧抽出用: status フィルタ + updated_at DESC
 CREATE INDEX IF NOT EXISTS idx_inquiries_status_updated
     ON support.inquiries (status, updated_at DESC);
 

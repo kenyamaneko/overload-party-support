@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 	"github.com/kenyamaneko/overload-party-support/packages/api-support/apisupportclient"
 	"github.com/kenyamaneko/overload-party-support/packages/api-support/apisupportserverfake"
 	"github.com/stretchr/testify/assert"
@@ -90,45 +89,6 @@ func TestClient_GetAnnouncement(t *testing.T) {
 			c := newTestClient(t, srv.URL())
 			_, err := c.GetAnnouncement(context.Background(), 1, "ja")
 			assert.ErrorContains(t, err, "apisupportclient: GetAnnouncement:")
-		})
-	})
-}
-
-func TestClient_SubmitInquiry(t *testing.T) {
-	t.Run("SubmitInquiry", func(t *testing.T) {
-		t.Run("400を受けたとき、ErrBadRequestになる", func(t *testing.T) {
-			srv := apisupportserverfake.NewServer()
-			defer srv.Close()
-			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusBadRequest, nil }
-
-			c := newTestClient(t, srv.URL())
-			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
-			assertSentinel(t, err, apisupportclient.ErrBadRequest)
-		})
-
-		t.Run("400を受けたとき、エラーメッセージに操作名SubmitInquiryが含まれる", func(t *testing.T) {
-			srv := apisupportserverfake.NewServer()
-			defer srv.Close()
-			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusBadRequest, nil }
-
-			c := newTestClient(t, srv.URL())
-			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
-			assert.ErrorContains(t, err, "apisupportclient: SubmitInquiry:")
-		})
-
-		t.Run("仕様に無いstatus (418)を受けたとき、既知のエラーのいずれにもならない", func(t *testing.T) {
-			srv := apisupportserverfake.NewServer()
-			defer srv.Close()
-			srv.SubmitInquiryFn = func(_ apisupport.SubmitInquiryRequest) (int, any) { return http.StatusTeapot, nil }
-
-			c := newTestClient(t, srv.URL())
-			_, err := c.SubmitInquiry(context.Background(), apisupport.SubmitInquiryRequest{})
-
-			require.Error(t, err)
-			assert.NotErrorIs(t, err, apisupportclient.ErrBadRequest)
-			assert.NotErrorIs(t, err, apisupportclient.ErrUnauthorized)
-			assert.NotErrorIs(t, err, apisupportclient.ErrNotFound)
-			assert.NotErrorIs(t, err, apisupportclient.ErrInternalServer)
 		})
 	})
 }

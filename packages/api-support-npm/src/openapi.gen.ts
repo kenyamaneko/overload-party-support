@@ -55,23 +55,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inquiries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 問い合わせフォームから受信した内容を保存し Slack/Email 通知する */
-        post: operations["submitInquiry"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -107,18 +90,6 @@ export interface components {
             body: string;
             /** Format: date-time */
             published_at: string | null;
-        };
-        /** @description `POST /api/v1/inquiries` の入力 (FEATURE_SPEC §7.1)。 */
-        SubmitInquiryRequest: {
-            title: string;
-            body: string;
-            /** @description 返信先メールアドレス (validate は usecase 層が担う) */
-            reply_email: string;
-        };
-        /** @description `POST /api/v1/inquiries` の出力。 */
-        SubmitInquiryResult: {
-            /** Format: int64 */
-            inquiry_id: number;
         };
         /**
          * @description お知らせ種別 (FEATURE_SPEC §2)。
@@ -229,37 +200,6 @@ export interface operations {
             };
             /** @description 該当お知らせ無し / 指定 lang の翻訳無し */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    submitInquiry: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SubmitInquiryRequest"];
-            };
-        };
-        responses: {
-            /** @description 受領成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubmitInquiryResult"];
-                };
-            };
-            /** @description 入力検証エラー (タイトル/本文/メールアドレス不正) */
-            400: {
                 headers: {
                     [name: string]: unknown;
                 };
