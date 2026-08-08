@@ -222,13 +222,19 @@ func TestAnnouncementGetDetail(t *testing.T) {
 			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
 			ctx := context.Background()
 			past := time.Now().Add(-time.Hour)
-			id, err := repo.Create(ctx, domain.CreateAnnouncementParams{
-				Type:        domain.TypeInfo,
-				PublishedAt: &past,
-				Translations: []domain.TranslationInput{
-					{Lang: domain.LangJa, Title: "実DBタイトル", Body: "実DB本文"},
-				},
-			})
+
+			var id int64
+			require.NoError(t, sharedPG.Pool.QueryRow(ctx,
+				`INSERT INTO support.announcements (type, published_at)
+				 VALUES ($1, $2)
+				 RETURNING announcement_id`,
+				domain.TypeInfo, past,
+			).Scan(&id))
+			_, err := sharedPG.Pool.Exec(ctx,
+				`INSERT INTO support.announcement_translations (announcement_id, lang, title, body)
+				 VALUES ($1, $2, $3, $4)`,
+				id, domain.LangJa, "実DBタイトル", "実DB本文",
+			)
 			require.NoError(t, err)
 
 			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))

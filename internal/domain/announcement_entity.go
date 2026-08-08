@@ -2,55 +2,6 @@ package domain
 
 import "time"
 
-// Announcement はお知らせ本体の内部モデル (`support.announcements` 1 行)。
-// PublishedAt IS NULL = 下書き状態 (FEATURE_SPEC §4.2 / §6.3)。
-type Announcement struct {
-	AnnouncementID int64
-	Type           string
-	PublishedAt    *time.Time
-	ExpiresAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
-// Translation はお知らせの言語別翻訳 (`support.announcement_translations` 1 行)。
-type Translation struct {
-	AnnouncementID int64
-	Lang           string
-	Title          string
-	Body           string
-	UpdatedAt      time.Time
-}
-
-// AnnouncementWithTranslations は管理 UI が記事編集画面で扱う、本体 + 全言語翻訳のペア。
-type AnnouncementWithTranslations struct {
-	Announcement Announcement
-	Translations []Translation
-}
-
-// TranslationInput はお知らせ作成 / 翻訳 upsert の入力 1 件分。
-// 値オブジェクトとして port (repo) と usecase で共通利用する。
-type TranslationInput struct {
-	Lang  string
-	Title string
-	Body  string
-}
-
-// CreateAnnouncementParams は新規作成に必要なフィールド集合。
-type CreateAnnouncementParams struct {
-	Type         string
-	PublishedAt  *time.Time
-	ExpiresAt    *time.Time
-	Translations []TranslationInput
-}
-
-// UpdateAnnouncementParams は本体更新に必要なフィールド集合 (翻訳は UpsertTranslation 経由)。
-type UpdateAnnouncementParams struct {
-	Type        string
-	PublishedAt *time.Time
-	ExpiresAt   *time.Time
-}
-
 // AnnouncementSummary は ListPublished の戻り値要素 (本体 + lang 固有の title)。
 // wire の apisupport.AnnouncementSummary とは別型で、presenter が詰め替える。
 type AnnouncementSummary struct {
