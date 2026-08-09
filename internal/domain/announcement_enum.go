@@ -1,6 +1,6 @@
 package domain
 
-// Type はお知らせ種別 (FEATURE_SPEC §2)。本パッケージが SSoT。
+// Type はお知らせ種別。本パッケージが SSoT。
 const (
 	TypeInfo        = "info"
 	TypeMaintenance = "maintenance"
@@ -8,7 +8,7 @@ const (
 	TypeUpdate      = "update"
 )
 
-// Lang は対応言語 (FEATURE_SPEC §3)。本パッケージが SSoT。
+// Lang は対応言語。本パッケージが SSoT。
 const (
 	LangJa = "ja"
 	LangEn = "en"

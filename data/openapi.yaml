@@ -69,7 +69,7 @@ components:
       in: query
       required: true
       description: |
-        取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+        取得言語。許容値は domain.SupportedLangs と同期する
         (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
       schema:
         type: string
@@ -96,7 +96,7 @@ components:
 
     AnnouncementSummary:
       description: |
-        `GET /api/v1/support/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+        `GET /api/v1/support/announcements` のレスポンス要素。
         expires_at / body はクライアントに露出させない。
       type: object
       required: [announcement_id, type, title, published_at]
@@ -115,7 +115,7 @@ components:
 
     AnnouncementDetail:
       description: |
-        `GET /api/v1/support/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+        `GET /api/v1/support/announcements/{announcementId}` のレスポンス。
         published_at は下書きの場合 null、expires_at はクライアントに露出させない。
       type: object
       required: [announcement_id, type, title, body, published_at]
@@ -138,7 +138,7 @@ components:
     # ─── Enums (流出するもの) ──────────────────────────────────────────
     AnnouncementType:
       type: string
-      description: お知らせ種別 (FEATURE_SPEC §2)。
+      description: お知らせ種別。
       enum:
         - info
         - maintenance

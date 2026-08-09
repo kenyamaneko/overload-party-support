@@ -40,7 +40,7 @@ func (e AnnouncementType) Valid() bool {
 	}
 }
 
-// AnnouncementDetail `GET /api/v1/support/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+// AnnouncementDetail `GET /api/v1/support/announcements/{announcementId}` のレスポンス。
 // published_at は下書きの場合 null、expires_at はクライアントに露出させない。
 type AnnouncementDetail struct {
 	AnnouncementID int64      `json:"announcement_id"`
@@ -48,7 +48,7 @@ type AnnouncementDetail struct {
 	PublishedAt    *time.Time `json:"published_at"`
 	Title          string     `json:"title"`
 
-	// Type お知らせ種別 (FEATURE_SPEC §2)。
+	// Type お知らせ種別。
 	Type AnnouncementType `json:"type"`
 }
 
@@ -57,18 +57,18 @@ type AnnouncementListResponse struct {
 	Announcements []AnnouncementSummary `json:"announcements"`
 }
 
-// AnnouncementSummary `GET /api/v1/support/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+// AnnouncementSummary `GET /api/v1/support/announcements` のレスポンス要素。
 // expires_at / body はクライアントに露出させない。
 type AnnouncementSummary struct {
 	AnnouncementID int64     `json:"announcement_id"`
 	PublishedAt    time.Time `json:"published_at"`
 	Title          string    `json:"title"`
 
-	// Type お知らせ種別 (FEATURE_SPEC §2)。
+	// Type お知らせ種別。
 	Type AnnouncementType `json:"type"`
 }
 
-// AnnouncementType お知らせ種別 (FEATURE_SPEC §2)。
+// AnnouncementType お知らせ種別。
 type AnnouncementType string
 
 // HealthResponse defines model for HealthResponse.
@@ -84,14 +84,14 @@ type LangQuery = string
 
 // ListAnnouncementsParams defines parameters for ListAnnouncements.
 type ListAnnouncementsParams struct {
-	// Lang 取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+	// Lang 取得言語。許容値は domain.SupportedLangs と同期する
 	// (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
 	Lang LangQuery `form:"lang" json:"lang"`
 }
 
 // GetAnnouncementParams defines parameters for GetAnnouncement.
 type GetAnnouncementParams struct {
-	// Lang 取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+	// Lang 取得言語。許容値は domain.SupportedLangs と同期する
 	// (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
 	Lang LangQuery `form:"lang" json:"lang"`
 }

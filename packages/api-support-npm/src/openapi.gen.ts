@@ -67,7 +67,7 @@ export interface components {
             announcements: components["schemas"]["AnnouncementSummary"][];
         };
         /**
-         * @description `GET /api/v1/support/announcements` のレスポンス要素 (FEATURE_SPEC §4)。
+         * @description `GET /api/v1/support/announcements` のレスポンス要素。
          *     expires_at / body はクライアントに露出させない。
          */
         AnnouncementSummary: {
@@ -79,7 +79,7 @@ export interface components {
             published_at: string;
         };
         /**
-         * @description `GET /api/v1/support/announcements/{announcementId}` のレスポンス (FEATURE_SPEC §5)。
+         * @description `GET /api/v1/support/announcements/{announcementId}` のレスポンス。
          *     published_at は下書きの場合 null、expires_at はクライアントに露出させない。
          */
         AnnouncementDetail: {
@@ -92,7 +92,7 @@ export interface components {
             published_at: string | null;
         };
         /**
-         * @description お知らせ種別 (FEATURE_SPEC §2)。
+         * @description お知らせ種別。
          * @enum {string}
          */
         AnnouncementType: "info" | "maintenance" | "event" | "update";
@@ -101,7 +101,7 @@ export interface components {
     parameters: {
         AnnouncementIdPath: number;
         /**
-         * @description 取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+         * @description 取得言語。許容値は domain.SupportedLangs と同期する
          *     (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
          */
         LangQuery: string;
@@ -136,7 +136,7 @@ export interface operations {
         parameters: {
             query: {
                 /**
-                 * @description 取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+                 * @description 取得言語。許容値は domain.SupportedLangs と同期する
                  *     (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
                  */
                 lang: components["parameters"]["LangQuery"];
@@ -169,7 +169,7 @@ export interface operations {
         parameters: {
             query: {
                 /**
-                 * @description 取得言語 (FEATURE_SPEC §3)。許容値は domain.SupportedLangs と同期する
+                 * @description 取得言語。許容値は domain.SupportedLangs と同期する
                  *     (drift 検知は本ファイルでは行わず application 層で `IsSupportedLang` が担う)。
                  */
                 lang: components["parameters"]["LangQuery"];
