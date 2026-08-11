@@ -31,11 +31,3 @@ make test     # Testcontainers でテスト実行（Docker 必須）
 アプリはコンテナ内で `go run` する。ソースを編集して `docker compose restart support` すれば、
 イメージを作り直さずに反映される。private module は host の module cache を読み取り専用でマウント
 して解決するため、`make run` は先に host 側で `go mod download` を実行する。
-
-## 公開パッケージ
-
-[packages/api-support/](packages/api-support/) に REST 契約型を公開している。[data/openapi.yaml](data/openapi.yaml) を編集後に以下で再生成する。
-
-```bash
-make generate-types   # oapi-codegen をローカルにインストールしておくこと
-```
