@@ -4,7 +4,7 @@
 
 ## 設計概要
 
-support スキーマはお知らせコンテンツと問い合わせ履歴を管理する。他スキーマへのクロススキーマ参照は持たず、Pub/Sub publish も行わない自己完結型。
+support スキーマはお知らせコンテンツと問い合わせ履歴を管理する。他スキーマへのクロススキーマ参照は持たず、Pub/Sub publish も行わない自己完結型。announcements / announcement_translations への書き込みは support のみが行う single source of truth。他サービスを直接呼び出すこともない。
 
 ---
 
@@ -32,6 +32,7 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 - 公開状態を `published_at` と `expires_at` の組だけで表現し、専用の `status` 列を持たない。`published_at IS NULL` = 下書き、`published_at > now` = 予約公開、`published_at <= now < expires_at` = 公開中、`expires_at <= now` = 期限切れ。状態遷移は UPDATE 1 つで完結する
 - `created_at` と `published_at` を分離することで、ドラフト保存（`published_at = NULL`）→ 予約公開（`published_at = 未来`）→ 即時公開（`published_at = now`）の遷移が本体 UPDATE だけで行える
 - `expires_at` を NULL 許容にしているのは、常設の利用規約リンク等、期限の無い告知を扱うため
+- `published_at` / `expires_at` は本体側に持たせ、翻訳側には持たせない。言語ごとに公開期間をずらす需要よりも公開期間を言語非依存に保つ一貫性を優先した（言語単位で公開期間を分けるとUX上の弊害が大きいと判断）
 
 ### announcement_translations
 
@@ -55,7 +56,7 @@ support スキーマはお知らせコンテンツと問い合わせ履歴を管
 - 親の CASCADE DELETE によりお知らせ削除時に翻訳行も自動で削除され、孤児行が残らない
 - 一覧取得の JOIN コストは 1 テーブルぶん増えるが、お知らせ件数は小規模（数百件オーダー）を想定しており実害なし
 - `lang` の列挙は ENUM ではなく VARCHAR を採用。support 側のコードで許容値を強制し、未知値はリクエストをエラー化（`ErrUnsupportedLang`）する。言語追加時に DDL 変更を伴わない
-- 指定 `lang` の翻訳が存在しないお知らせは一覧から除外・詳細で 404。フォールバックは行わない（CLAUDE.md「デフォルト値へのフォールバックを行わない」に従う）
+- 指定 `lang` の翻訳が存在しないお知らせは一覧から除外・詳細で 404。フォールバックは行わない（CLAUDE.md「デフォルト値へのフォールバックを行わない」に従う）。翻訳の未整備を運営に対して「サイレントに成功しない」ことで可視化し、運用者責務で補完させる
 
 ### inquiries
 
