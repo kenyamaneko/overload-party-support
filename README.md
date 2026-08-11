@@ -2,7 +2,7 @@
 
 お知らせ配信を行う内部マイクロサービス。起動するのは gateway 向け内部 REST のポート 9009 のみ。
 
-詳細は [サービス設計書](docs/ARCHITECTURE.md) / [API仕様書](data/openapi.yaml) / [データ設計書](docs/DATA_DESIGN.md) を参照。
+詳細は [API仕様書](data/openapi.yaml) / [データ設計書](docs/DATA_DESIGN.md) を参照。設計判断 (Why) は [common の ADR](https://github.com/kenyamaneko/overload-party-common/tree/main/docs/adr) に記録する。
 
 [テスト観点カタログ](https://kenyamaneko.github.io/overload-party-support/): テスト名から生成した、テスト済みの観点の一覧。
 
