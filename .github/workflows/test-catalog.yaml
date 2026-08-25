@@ -60,7 +60,7 @@ jobs:
         with:
           title: support テスト観点カタログ
           sections: |
-            外から見た振る舞い:サービス:go-json:go-test-unit.json:github.com/kenyamaneko/overload-party-support/internal/handler/
+            外から見た振る舞い:サービス:go-json:go-test-unit.json:github.com/kenyamaneko/overload-party-support/internal/handler/,github.com/kenyamaneko/overload-party-support/internal/router
             内部の挙動:サービス:go-json:go-test-unit.json:github.com/kenyamaneko/overload-party-support/cmd/server,github.com/kenyamaneko/overload-party-support/internal/adapter/,github.com/kenyamaneko/overload-party-support/internal/config,github.com/kenyamaneko/overload-party-support/internal/domain,github.com/kenyamaneko/overload-party-support/internal/repository/,github.com/kenyamaneko/overload-party-support/internal/usecase/
           subgroups: |
             外から見た振る舞い:サービス:API パッケージ:go-json:go-test-unit-extra.json
