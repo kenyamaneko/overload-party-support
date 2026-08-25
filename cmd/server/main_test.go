@@ -57,17 +57,22 @@ func TestServe(t *testing.T) {
 
 			addr := "http://" + ln.Addr().String() + "/"
 			var body []byte
-			require.Eventually(t, func() bool {
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
 				resp, getErr := http.Get(addr)
-				if getErr != nil {
-					return false
+				if !assert.NoError(collect, getErr) {
+					return
 				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					return false
+				defer func() {
+					if closeErr := resp.Body.Close(); closeErr != nil {
+						collect.Errorf("resp.Body.Close(): %v", closeErr)
+					}
+				}()
+				if !assert.Equal(collect, http.StatusOK, resp.StatusCode) {
+					return
 				}
-				body, getErr = io.ReadAll(resp.Body)
-				return getErr == nil
+				var readErr error
+				body, readErr = io.ReadAll(resp.Body)
+				assert.NoError(collect, readErr)
 			}, 2*time.Second, 10*time.Millisecond)
 
 			assert.Equal(t, "serveテスト応答", string(body))
