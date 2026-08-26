@@ -222,6 +222,18 @@ func TestGetPublishedDetail(t *testing.T) {
 			assert.Equal(t, id, got.AnnouncementID)
 		})
 
+		t.Run("指定announcementIdの行に指定langの翻訳が存在するとき、期限日時が現在時刻以前(期限切れ)でも取得できる", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", &past, &past)
+			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
+
+			got, err := repo.GetPublishedDetail(context.Background(), id, "ja")
+
+			require.NoError(t, err)
+			assert.Equal(t, id, got.AnnouncementID)
+		})
+
 		t.Run("指定announcementIdの行が存在しないとき、port.ErrNotFoundを返す", func(t *testing.T) {
 			pg.Truncate(t)
 			repo := postgres.NewAnnouncementRepository(pg.Pool)
