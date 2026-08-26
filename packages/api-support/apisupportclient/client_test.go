@@ -31,45 +31,43 @@ func newStatusServer(t *testing.T, status int, body any) *httptest.Server {
 
 func TestClientStatusErrorConversion(t *testing.T) {
 	t.Run("[公開クライアントライブラリ]ステータスコードからのエラー変換", func(t *testing.T) {
-		t.Run("応答が400のとき、apisupportclient.ErrBadRequestを返す", func(t *testing.T) {
-			srv := newStatusServer(t, http.StatusBadRequest, nil)
-			c, err := apisupportclient.New(srv.URL)
-			require.NoError(t, err)
+		statusTests := []struct {
+			name    string
+			status  int
+			wantErr error
+		}{
+			{
+				name:    "応答が400のとき、apisupportclient.ErrBadRequestを返す",
+				status:  http.StatusBadRequest,
+				wantErr: apisupportclient.ErrBadRequest,
+			},
+			{
+				name:    "応答が401のとき、apisupportclient.ErrUnauthorizedを返す",
+				status:  http.StatusUnauthorized,
+				wantErr: apisupportclient.ErrUnauthorized,
+			},
+			{
+				name:    "応答が404のとき、apisupportclient.ErrNotFoundを返す",
+				status:  http.StatusNotFound,
+				wantErr: apisupportclient.ErrNotFound,
+			},
+			{
+				name:    "応答が500以上のとき、apisupportclient.ErrInternalServerを返す",
+				status:  http.StatusInternalServerError,
+				wantErr: apisupportclient.ErrInternalServer,
+			},
+		}
+		for _, tt := range statusTests {
+			t.Run(tt.name, func(t *testing.T) {
+				srv := newStatusServer(t, tt.status, nil)
+				c, err := apisupportclient.New(srv.URL)
+				require.NoError(t, err)
 
-			_, err = c.ListAnnouncements(context.Background(), "ja")
+				_, err = c.ListAnnouncements(context.Background(), "ja")
 
-			assert.ErrorIs(t, err, apisupportclient.ErrBadRequest)
-		})
-
-		t.Run("応答が401のとき、apisupportclient.ErrUnauthorizedを返す", func(t *testing.T) {
-			srv := newStatusServer(t, http.StatusUnauthorized, nil)
-			c, err := apisupportclient.New(srv.URL)
-			require.NoError(t, err)
-
-			_, err = c.ListAnnouncements(context.Background(), "ja")
-
-			assert.ErrorIs(t, err, apisupportclient.ErrUnauthorized)
-		})
-
-		t.Run("応答が404のとき、apisupportclient.ErrNotFoundを返す", func(t *testing.T) {
-			srv := newStatusServer(t, http.StatusNotFound, nil)
-			c, err := apisupportclient.New(srv.URL)
-			require.NoError(t, err)
-
-			_, err = c.ListAnnouncements(context.Background(), "ja")
-
-			assert.ErrorIs(t, err, apisupportclient.ErrNotFound)
-		})
-
-		t.Run("応答が500以上のとき、apisupportclient.ErrInternalServerを返す", func(t *testing.T) {
-			srv := newStatusServer(t, http.StatusInternalServerError, nil)
-			c, err := apisupportclient.New(srv.URL)
-			require.NoError(t, err)
-
-			_, err = c.ListAnnouncements(context.Background(), "ja")
-
-			assert.ErrorIs(t, err, apisupportclient.ErrInternalServer)
-		})
+				assert.ErrorIs(t, err, tt.wantErr)
+			})
+		}
 
 		t.Run("応答が400・401・404・500以上のいずれの区分にも該当しない300のとき、ErrBadRequest・ErrUnauthorized・ErrNotFound・ErrInternalServerのいずれでもない、呼び出し元の操作名とステータスコードを含むエラーを返す", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusMultipleChoices, nil)

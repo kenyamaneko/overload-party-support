@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -47,27 +48,34 @@ func seedPublishedAnnouncement(t *testing.T, lang, title, body string) int64 {
 
 func TestList(t *testing.T) {
 	t.Run("[公開お知らせAPI]お知らせ一覧の取得", func(t *testing.T) {
-		t.Run("langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す", func(t *testing.T) {
-			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
+		validationTests := []struct {
+			name     string
+			url      string
+			wantBody string
+		}{
+			{
+				name:     "langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す",
+				url:      "/api/v1/support/announcements",
+				wantBody: `{"error":"announcement: lang is required"}`,
+			},
+			{
+				name:     "langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す",
+				url:      "/api/v1/support/announcements?lang=fr",
+				wantBody: `{"error":"announcement: unsupported lang"}`,
+			},
+		}
+		for _, tt := range validationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
 
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/api/v1/support/announcements", nil)
-			r.ServeHTTP(w, req)
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest("GET", tt.url, nil)
+				r.ServeHTTP(w, req)
 
-			assert.Equal(t, 400, w.Code)
-			assert.JSONEq(t, `{"error":"announcement: lang is required"}`, w.Body.String())
-		})
-
-		t.Run("langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す", func(t *testing.T) {
-			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=fr", nil)
-			r.ServeHTTP(w, req)
-
-			assert.Equal(t, 400, w.Code)
-			assert.JSONEq(t, `{"error":"announcement: unsupported lang"}`, w.Body.String())
-		})
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.JSONEq(t, tt.wantBody, w.Body.String())
+			})
+		}
 
 		t.Run("お知らせ取得ポートが想定外のエラーを返すとき、ステータス500を返す", func(t *testing.T) {
 			querier := &port.MockAnnouncementRepo{
@@ -81,7 +89,7 @@ func TestList(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, 500, w.Code)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
 		})
 
 		t.Run("お知らせ取得ポートが結果としてnil(該当なし)を返すとき、応答本文のannouncementsはnullでなく空配列になる", func(t *testing.T) {
@@ -96,7 +104,7 @@ func TestList(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, 200, w.Code)
+			assert.Equal(t, http.StatusOK, w.Code)
 			assert.JSONEq(t, `{"announcements":[]}`, w.Body.String())
 		})
 
@@ -118,7 +126,7 @@ func TestList(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			require.Equal(t, 200, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
 			var body apisupport.AnnouncementListResponse
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 			require.Len(t, body.Announcements, 2)
@@ -136,38 +144,43 @@ func TestList(t *testing.T) {
 
 func TestGetDetail(t *testing.T) {
 	t.Run("[公開お知らせAPI]お知らせ詳細の取得", func(t *testing.T) {
-		t.Run("announcementIdが数値としてパースできない値のとき、ステータス404と本文{\"error\":\"announcement not found\"}を返す", func(t *testing.T) {
-			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
+		validationTests := []struct {
+			name     string
+			url      string
+			wantCode int
+			wantBody string
+		}{
+			{
+				name:     "announcementIdが数値としてパースできない値のとき、ステータス404と本文{\"error\":\"announcement not found\"}を返す",
+				url:      "/api/v1/support/announcements/abc?lang=ja",
+				wantCode: http.StatusNotFound,
+				wantBody: `{"error":"announcement not found"}`,
+			},
+			{
+				name:     "langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す",
+				url:      "/api/v1/support/announcements/1",
+				wantCode: http.StatusBadRequest,
+				wantBody: `{"error":"announcement: lang is required"}`,
+			},
+			{
+				name:     "langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す",
+				url:      "/api/v1/support/announcements/1?lang=fr",
+				wantCode: http.StatusBadRequest,
+				wantBody: `{"error":"announcement: unsupported lang"}`,
+			},
+		}
+		for _, tt := range validationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
 
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/api/v1/support/announcements/abc?lang=ja", nil)
-			r.ServeHTTP(w, req)
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest("GET", tt.url, nil)
+				r.ServeHTTP(w, req)
 
-			assert.Equal(t, 404, w.Code)
-			assert.JSONEq(t, `{"error":"announcement not found"}`, w.Body.String())
-		})
-
-		t.Run("langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す", func(t *testing.T) {
-			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1", nil)
-			r.ServeHTTP(w, req)
-
-			assert.Equal(t, 400, w.Code)
-			assert.JSONEq(t, `{"error":"announcement: lang is required"}`, w.Body.String())
-		})
-
-		t.Run("langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す", func(t *testing.T) {
-			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=fr", nil)
-			r.ServeHTTP(w, req)
-
-			assert.Equal(t, 400, w.Code)
-			assert.JSONEq(t, `{"error":"announcement: unsupported lang"}`, w.Body.String())
-		})
+				assert.Equal(t, tt.wantCode, w.Code)
+				assert.JSONEq(t, tt.wantBody, w.Body.String())
+			})
+		}
 
 		t.Run("お知らせ取得ポートがport.ErrNotFoundを返すとき、ステータス404と本文{\"error\":\"announcement: not found\"}を返す", func(t *testing.T) {
 			querier := &port.MockAnnouncementRepo{
@@ -181,7 +194,7 @@ func TestGetDetail(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, 404, w.Code)
+			assert.Equal(t, http.StatusNotFound, w.Code)
 			assert.JSONEq(t, `{"error":"announcement: not found"}`, w.Body.String())
 		})
 
@@ -197,7 +210,7 @@ func TestGetDetail(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, 500, w.Code)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
 		})
 
 		t.Run("お知らせが取得できたとき、応答本文にannouncement_id・type・title・body・published_atが取得結果のとおり反映される", func(t *testing.T) {
@@ -220,7 +233,7 @@ func TestGetDetail(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements/7?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			require.Equal(t, 200, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
 			var body apisupport.AnnouncementDetail
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 			assert.Equal(t, int64(7), body.AnnouncementID)
@@ -250,7 +263,7 @@ func TestGetDetail(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements/8?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			require.Equal(t, 200, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
 			var body apisupport.AnnouncementDetail
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 			assert.Nil(t, body.PublishedAt)
@@ -270,7 +283,7 @@ func TestAnnouncementEndToEnd(t *testing.T) {
 			req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/support/announcements/%d?lang=ja", id), nil)
 			r.ServeHTTP(w, req)
 
-			require.Equal(t, 200, w.Code)
+			require.Equal(t, http.StatusOK, w.Code)
 			var body apisupport.AnnouncementDetail
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 			assert.Equal(t, id, body.AnnouncementID)
@@ -287,7 +300,7 @@ func TestAnnouncementEndToEnd(t *testing.T) {
 			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
 			r.ServeHTTP(w, req)
 
-			assert.Equal(t, 404, w.Code)
+			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
 	})
 }

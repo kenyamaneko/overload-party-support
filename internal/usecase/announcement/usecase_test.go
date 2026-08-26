@@ -18,21 +18,31 @@ var errFromQuerier = errors.New("querier: boom")
 
 func TestList(t *testing.T) {
 	t.Run("[公開お知らせユースケース]公開お知らせ一覧の取得", func(t *testing.T) {
-		t.Run("langが空文字のとき、announcement.ErrLangRequiredを返す", func(t *testing.T) {
-			uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
+		langValidationTests := []struct {
+			name    string
+			lang    string
+			wantErr error
+		}{
+			{
+				name:    "langが空文字のとき、announcement.ErrLangRequiredを返す",
+				lang:    "",
+				wantErr: announcement.ErrLangRequired,
+			},
+			{
+				name:    "langが対応外の値のとき、announcement.ErrUnsupportedLangを返す",
+				lang:    "fr",
+				wantErr: announcement.ErrUnsupportedLang,
+			},
+		}
+		for _, tt := range langValidationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
 
-			_, err := uc.List(context.Background(), "")
+				_, err := uc.List(context.Background(), tt.lang)
 
-			assert.ErrorIs(t, err, announcement.ErrLangRequired)
-		})
-
-		t.Run("langが対応外の値のとき、announcement.ErrUnsupportedLangを返す", func(t *testing.T) {
-			uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
-
-			_, err := uc.List(context.Background(), "fr")
-
-			assert.ErrorIs(t, err, announcement.ErrUnsupportedLang)
-		})
+				assert.ErrorIs(t, err, tt.wantErr)
+			})
+		}
 
 		t.Run("langが対応言語のとき、指定したlangと現在時刻をお知らせ取得ポートへ渡す", func(t *testing.T) {
 			fixedNow := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -88,21 +98,31 @@ func TestList(t *testing.T) {
 
 func TestGetDetail(t *testing.T) {
 	t.Run("[公開お知らせユースケース]公開お知らせ詳細の取得", func(t *testing.T) {
-		t.Run("langが空文字のとき、announcement.ErrLangRequiredを返す", func(t *testing.T) {
-			uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
+		langValidationTests := []struct {
+			name    string
+			lang    string
+			wantErr error
+		}{
+			{
+				name:    "langが空文字のとき、announcement.ErrLangRequiredを返す",
+				lang:    "",
+				wantErr: announcement.ErrLangRequired,
+			},
+			{
+				name:    "langが対応外の値のとき、announcement.ErrUnsupportedLangを返す",
+				lang:    "fr",
+				wantErr: announcement.ErrUnsupportedLang,
+			},
+		}
+		for _, tt := range langValidationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
 
-			_, err := uc.GetDetail(context.Background(), 1, "")
+				_, err := uc.GetDetail(context.Background(), 1, tt.lang)
 
-			assert.ErrorIs(t, err, announcement.ErrLangRequired)
-		})
-
-		t.Run("langが対応外の値のとき、announcement.ErrUnsupportedLangを返す", func(t *testing.T) {
-			uc := announcement.New(&port.MockAnnouncementRepo{}, time.Now)
-
-			_, err := uc.GetDetail(context.Background(), 1, "fr")
-
-			assert.ErrorIs(t, err, announcement.ErrUnsupportedLang)
-		})
+				assert.ErrorIs(t, err, tt.wantErr)
+			})
+		}
 
 		t.Run("langが対応言語のとき、指定したannouncementIDとlangをお知らせ取得ポートへ渡す", func(t *testing.T) {
 			var gotID int64

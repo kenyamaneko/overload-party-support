@@ -49,92 +49,86 @@ func TestListPublished(t *testing.T) {
 		past := now.Add(-1 * time.Hour)
 		future := now.Add(1 * time.Hour)
 
-		t.Run("公開日時が現在時刻以前で、かつ期限日時が未設定または現在時刻より後で、指定langの翻訳が存在する行が結果に含まれる", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &past, &future)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
+		inclusionTests := []struct {
+			name        string
+			publishedAt *time.Time
+			expiresAt   *time.Time
+		}{
+			{
+				name:        "公開日時が現在時刻以前で、かつ期限日時が現在時刻より後で、指定langの翻訳が存在する行が結果に含まれる",
+				publishedAt: &past,
+				expiresAt:   &future,
+			},
+			{
+				name:        "期限日時が未設定の行は、期限切れとして除外されない",
+				publishedAt: &past,
+				expiresAt:   nil,
+			},
+			{
+				name:        "公開日時が現在時刻と同時刻の行は結果に含まれる",
+				publishedAt: &now,
+				expiresAt:   nil,
+			},
+		}
+		for _, tt := range inclusionTests {
+			t.Run(tt.name, func(t *testing.T) {
+				pg.Truncate(t)
+				repo := postgres.NewAnnouncementRepository(pg.Pool)
+				id := insertAnnouncement(t, pg.Pool, "info", tt.publishedAt, tt.expiresAt)
+				insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
 
-			got, err := repo.ListPublished(context.Background(), "ja", now)
+				got, err := repo.ListPublished(context.Background(), "ja", now)
 
-			require.NoError(t, err)
-			require.Len(t, got, 1)
-			assert.Equal(t, id, got[0].AnnouncementID)
-		})
+				require.NoError(t, err)
+				require.Len(t, got, 1)
+				assert.Equal(t, id, got[0].AnnouncementID)
+			})
+		}
 
-		t.Run("公開日時が未設定(下書き)の行は結果に含まれない", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", nil, nil)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
+		exclusionTests := []struct {
+			name            string
+			publishedAt     *time.Time
+			expiresAt       *time.Time
+			translationLang string
+		}{
+			{
+				name:            "公開日時が未設定の行は結果に含まれない",
+				publishedAt:     nil,
+				expiresAt:       nil,
+				translationLang: "ja",
+			},
+			{
+				name:            "公開日時が現在時刻より後(公開前)の行は結果に含まれない",
+				publishedAt:     &future,
+				expiresAt:       nil,
+				translationLang: "ja",
+			},
+			{
+				name:            "期限日時が現在時刻以前(期限日時と現在時刻が同時刻の場合を含む)の行は結果に含まれない",
+				publishedAt:     &past,
+				expiresAt:       &now,
+				translationLang: "ja",
+			},
+			{
+				name:            "指定langの翻訳が存在しない行は結果に含まれない(他langの翻訳しかない行は対象外になる)",
+				publishedAt:     &past,
+				expiresAt:       nil,
+				translationLang: "en",
+			},
+		}
+		for _, tt := range exclusionTests {
+			t.Run(tt.name, func(t *testing.T) {
+				pg.Truncate(t)
+				repo := postgres.NewAnnouncementRepository(pg.Pool)
+				id := insertAnnouncement(t, pg.Pool, "info", tt.publishedAt, tt.expiresAt)
+				insertTranslation(t, pg.Pool, id, tt.translationLang, "タイトル", "本文")
 
-			got, err := repo.ListPublished(context.Background(), "ja", now)
+				got, err := repo.ListPublished(context.Background(), "ja", now)
 
-			require.NoError(t, err)
-			assert.Empty(t, got)
-		})
-
-		t.Run("公開日時が現在時刻より後(公開前)の行は結果に含まれない", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &future, nil)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
-
-			got, err := repo.ListPublished(context.Background(), "ja", now)
-
-			require.NoError(t, err)
-			assert.Empty(t, got)
-		})
-
-		t.Run("期限日時が現在時刻以前(期限日時と現在時刻が同時刻の場合を含む)の行は結果に含まれない", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &past, &now)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
-
-			got, err := repo.ListPublished(context.Background(), "ja", now)
-
-			require.NoError(t, err)
-			assert.Empty(t, got)
-		})
-
-		t.Run("期限日時が未設定の行は、期限切れとして除外されない", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &past, nil)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
-
-			got, err := repo.ListPublished(context.Background(), "ja", now)
-
-			require.NoError(t, err)
-			require.Len(t, got, 1)
-			assert.Equal(t, id, got[0].AnnouncementID)
-		})
-
-		t.Run("公開日時が現在時刻と同時刻の行は結果に含まれる", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &now, nil)
-			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
-
-			got, err := repo.ListPublished(context.Background(), "ja", now)
-
-			require.NoError(t, err)
-			require.Len(t, got, 1)
-			assert.Equal(t, id, got[0].AnnouncementID)
-		})
-
-		t.Run("指定langの翻訳が存在しない行は結果に含まれない(他langの翻訳しかない行は対象外になる)", func(t *testing.T) {
-			pg.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(pg.Pool)
-			id := insertAnnouncement(t, pg.Pool, "info", &past, nil)
-			insertTranslation(t, pg.Pool, id, "en", "title", "body")
-
-			got, err := repo.ListPublished(context.Background(), "ja", now)
-
-			require.NoError(t, err)
-			assert.Empty(t, got)
-		})
+				require.NoError(t, err)
+				assert.Empty(t, got)
+			})
+		}
 
 		t.Run("公開条件を満たす行が複数あるとき、公開日時の降順で並ぶ", func(t *testing.T) {
 			pg.Truncate(t)

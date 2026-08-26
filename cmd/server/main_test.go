@@ -20,9 +20,18 @@ func TestSetupLogger(t *testing.T) {
 			name string
 			env  config.Env
 		}{
-			{"動作環境がlocalのとき、エラーにならない", config.EnvLocal},
-			{"動作環境がstagingのとき、エラーにならない", config.EnvStaging},
-			{"動作環境がproductionのとき、エラーにならない", config.EnvProduction},
+			{
+				name: "動作環境がlocalのとき、エラーにならない",
+				env:  config.EnvLocal,
+			},
+			{
+				name: "動作環境がstagingのとき、エラーにならない",
+				env:  config.EnvStaging,
+			},
+			{
+				name: "動作環境がproductionのとき、エラーにならない",
+				env:  config.EnvProduction,
+			},
 		}
 		for _, tt := range validEnvs {
 			t.Run(tt.name, func(t *testing.T) {
@@ -30,7 +39,7 @@ func TestSetupLogger(t *testing.T) {
 			})
 		}
 
-		t.Run("動作環境がそれ以外の値invalidのとき、エラーになる", func(t *testing.T) {
+		t.Run("動作環境がlocal・staging・productionのいずれでもない値invalidのとき、エラーになる", func(t *testing.T) {
 			assert.Error(t, setupLogger(config.Env("invalid")))
 		})
 	})
