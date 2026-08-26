@@ -20,9 +20,9 @@ func TestSetupLogger(t *testing.T) {
 			name string
 			env  config.Env
 		}{
-			{"envがlocalのとき、エラーにならない", config.EnvLocal},
-			{"envがstagingのとき、エラーにならない", config.EnvStaging},
-			{"envがproductionのとき、エラーにならない", config.EnvProduction},
+			{"動作環境がlocalのとき、エラーにならない", config.EnvLocal},
+			{"動作環境がstagingのとき、エラーにならない", config.EnvStaging},
+			{"動作環境がproductionのとき、エラーにならない", config.EnvProduction},
 		}
 		for _, tt := range validEnvs {
 			t.Run(tt.name, func(t *testing.T) {
@@ -30,7 +30,7 @@ func TestSetupLogger(t *testing.T) {
 			})
 		}
 
-		t.Run("envがそれ以外の値invalidのとき、エラーになる", func(t *testing.T) {
+		t.Run("動作環境がそれ以外の値invalidのとき、エラーになる", func(t *testing.T) {
 			assert.Error(t, setupLogger(config.Env("invalid")))
 		})
 	})
@@ -78,7 +78,7 @@ func TestServe(t *testing.T) {
 			assert.Equal(t, "serveテスト応答", string(body))
 		})
 
-		t.Run("ctxがキャンセルされると、graceful shutdownを行いエラー無く終了する", func(t *testing.T) {
+		t.Run("停止が指示されると、graceful shutdownを行いエラー無く終了する", func(t *testing.T) {
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
 			srv := &http.Server{

@@ -71,7 +71,7 @@ func TestClientStatusErrorConversion(t *testing.T) {
 			assert.ErrorIs(t, err, apisupportclient.ErrInternalServer)
 		})
 
-		t.Run("応答が上記のいずれの区分にも該当しない300のとき、いずれのsentinelでもない、呼び出し元の操作名とステータスコードを含むエラーを返す", func(t *testing.T) {
+		t.Run("応答が400・401・404・500以上のいずれの区分にも該当しない300のとき、ErrBadRequest・ErrUnauthorized・ErrNotFound・ErrInternalServerのいずれでもない、呼び出し元の操作名とステータスコードを含むエラーを返す", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusMultipleChoices, nil)
 			c, err := apisupportclient.New(srv.URL)
 			require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestClientStatusErrorConversion(t *testing.T) {
 }
 
 func TestClientGetHealth(t *testing.T) {
-	t.Run("[公開クライアントライブラリ]GetHealth", func(t *testing.T) {
+	t.Run("[公開クライアントライブラリ]ヘルスチェックの取得", func(t *testing.T) {
 		t.Run("応答が200のとき、応答本文をそのまま返す", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusOK, map[string]string{"status": "ok"})
 			c, err := apisupportclient.New(srv.URL)
@@ -102,7 +102,7 @@ func TestClientGetHealth(t *testing.T) {
 			assert.Equal(t, "ok", got.Status)
 		})
 
-		t.Run("応答が200以外のとき、ステータスコードからのエラー変換の規則に従ったエラーを返し、エラーメッセージに操作名GetHealthが含まれる", func(t *testing.T) {
+		t.Run("応答が500のとき、ErrInternalServerを返し、エラーメッセージに操作名GetHealthが含まれる", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusInternalServerError, nil)
 			c, err := apisupportclient.New(srv.URL)
 			require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestClientGetHealth(t *testing.T) {
 }
 
 func TestClientListAnnouncements(t *testing.T) {
-	t.Run("[公開クライアントライブラリ]ListAnnouncements", func(t *testing.T) {
+	t.Run("[公開クライアントライブラリ]お知らせ一覧の取得", func(t *testing.T) {
 		t.Run("呼び出し時、指定したlangをクエリパラメータとして送信する", func(t *testing.T) {
 			var gotLang string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +152,7 @@ func TestClientListAnnouncements(t *testing.T) {
 			assert.Equal(t, "タイトル", got.Announcements[0].Title)
 		})
 
-		t.Run("応答が200以外のとき、ステータスコードからのエラー変換の規則に従ったエラーを返し、エラーメッセージに操作名ListAnnouncementsが含まれる", func(t *testing.T) {
+		t.Run("応答が404のとき、ErrNotFoundを返し、エラーメッセージに操作名ListAnnouncementsが含まれる", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusNotFound, nil)
 			c, err := apisupportclient.New(srv.URL)
 			require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestClientListAnnouncements(t *testing.T) {
 }
 
 func TestClientGetAnnouncement(t *testing.T) {
-	t.Run("[公開クライアントライブラリ]GetAnnouncement", func(t *testing.T) {
+	t.Run("[公開クライアントライブラリ]お知らせ詳細の取得", func(t *testing.T) {
 		t.Run("呼び出し時、指定したannouncementIDとlangをリクエストとして送信する", func(t *testing.T) {
 			var gotPath, gotLang string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +204,7 @@ func TestClientGetAnnouncement(t *testing.T) {
 			assert.Equal(t, "本文", got.Body)
 		})
 
-		t.Run("応答が200以外のとき、ステータスコードからのエラー変換の規則に従ったエラーを返し、エラーメッセージに操作名GetAnnouncementが含まれる", func(t *testing.T) {
+		t.Run("応答が400のとき、ErrBadRequestを返し、エラーメッセージに操作名GetAnnouncementが含まれる", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusBadRequest, nil)
 			c, err := apisupportclient.New(srv.URL)
 			require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestClientGetAnnouncement(t *testing.T) {
 
 func TestClientRequestOptions(t *testing.T) {
 	t.Run("[公開クライアントライブラリ]リクエストオプション", func(t *testing.T) {
-		t.Run("WithHTTPClientで差し替えたHTTPクライアントを指定したとき、そのクライアントを介してリクエストが送信される", func(t *testing.T) {
+		t.Run("HTTPクライアントを差し替えて指定したとき、そのクライアントを介してリクエストが送信される", func(t *testing.T) {
 			srv := newStatusServer(t, http.StatusOK, map[string]any{"announcements": []any{}})
 			recorder := &recordingDoer{base: http.DefaultClient}
 			c, err := apisupportclient.New(srv.URL, apisupportclient.WithHTTPClient(recorder))
@@ -231,7 +231,7 @@ func TestClientRequestOptions(t *testing.T) {
 			assert.Equal(t, 1, recorder.calls)
 		})
 
-		t.Run("WithRequestEditorFnで設定したリクエスト編集処理は、送信する全てのリクエストに適用される", func(t *testing.T) {
+		t.Run("リクエストを編集する処理を設定すると、送信する全てのリクエストにその処理が適用される", func(t *testing.T) {
 			const headerName = "X-Test-Editor"
 			var gotHeaders []string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -40,8 +40,8 @@ func readOpenAPIAnnouncementTypeEnum(t *testing.T) []string {
 }
 
 func TestAnnouncementTypeOpenAPIContract(t *testing.T) {
-	t.Run("[お知らせドメインモデル]AnnouncementTypeのdomain-openapi.yaml契約整合", func(t *testing.T) {
-		t.Run("domainのお知らせ種別定数の集合が、info・maintenance・event・updateの集合と一致する", func(t *testing.T) {
+	t.Run("[お知らせドメインモデル]お知らせ種別とopenapi.yamlの契約整合", func(t *testing.T) {
+		t.Run("お知らせ種別の定数の集合が、info・maintenance・event・updateの集合と一致する", func(t *testing.T) {
 			types := []string{domain.TypeInfo, domain.TypeMaintenance, domain.TypeEvent, domain.TypeUpdate}
 			assert.ElementsMatch(t, []string{"info", "maintenance", "event", "update"}, types)
 		})

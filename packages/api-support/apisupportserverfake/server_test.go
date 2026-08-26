@@ -13,7 +13,7 @@ import (
 
 func TestServerListAnnouncements(t *testing.T) {
 	t.Run("[テスト用フェイクサーバ]お知らせ一覧エンドポイント", func(t *testing.T) {
-		t.Run("ListAnnouncementsFnが未設定のとき、ステータス200でannouncementsが空配列の本文を返す", func(t *testing.T) {
+		t.Run("お知らせ一覧を返す処理を設定していないとき、ステータス200でannouncementsが空配列の本文を返す", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -27,7 +27,7 @@ func TestServerListAnnouncements(t *testing.T) {
 			assert.JSONEq(t, `{"announcements":[]}`, string(body))
 		})
 
-		t.Run("ListAnnouncementsFnが設定されているとき、そのFnにlangクエリパラメータの値が渡る", func(t *testing.T) {
+		t.Run("お知らせ一覧を返す処理を設定しているとき、その処理にlangクエリパラメータの値が渡る", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			var gotLang string
@@ -42,7 +42,7 @@ func TestServerListAnnouncements(t *testing.T) {
 			assert.Equal(t, "en", gotLang)
 		})
 
-		t.Run("ListAnnouncementsFnが設定されているとき、その戻り値のステータスと本文がそのまま応答になる", func(t *testing.T) {
+		t.Run("お知らせ一覧を返す処理を設定しているとき、その処理の戻り値のステータスと本文がそのまま応答になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.ListAnnouncementsFn = func(lang string) (int, any) {
@@ -59,7 +59,7 @@ func TestServerListAnnouncements(t *testing.T) {
 			assert.JSONEq(t, `{"custom":"value"}`, string(body))
 		})
 
-		t.Run("ListAnnouncementsFnの戻り値の本文がnilのとき、応答本文は空になる", func(t *testing.T) {
+		t.Run("お知らせ一覧を返す処理の戻り値の本文がnilのとき、応答本文は空になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.ListAnnouncementsFn = func(lang string) (int, any) {
@@ -79,7 +79,18 @@ func TestServerListAnnouncements(t *testing.T) {
 
 func TestServerGetAnnouncement(t *testing.T) {
 	t.Run("[テスト用フェイクサーバ]お知らせ詳細エンドポイント", func(t *testing.T) {
-		t.Run("announcementIdが数値としてパースできない値のとき、GetAnnouncementFnを呼ばずステータス404を返す", func(t *testing.T) {
+		t.Run("announcementIdが数値としてパースできない値のとき、ステータス404を返す", func(t *testing.T) {
+			srv := apisupportserverfake.NewServer()
+			defer srv.Close()
+
+			resp, err := http.Get(srv.URL() + "/api/v1/support/announcements/abc?lang=ja")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+
+		t.Run("announcementIdが数値としてパースできない値のとき、お知らせ詳細を返す処理を呼ばない", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			called := false
@@ -88,15 +99,13 @@ func TestServerGetAnnouncement(t *testing.T) {
 				return http.StatusOK, nil
 			}
 
-			resp, err := http.Get(srv.URL() + "/api/v1/support/announcements/abc?lang=ja")
+			_, err := http.Get(srv.URL() + "/api/v1/support/announcements/abc?lang=ja")
 			require.NoError(t, err)
-			defer resp.Body.Close()
 
-			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 			assert.False(t, called)
 		})
 
-		t.Run("GetAnnouncementFnが未設定のとき、ステータス404を返す", func(t *testing.T) {
+		t.Run("お知らせ詳細を返す処理を設定していないとき、ステータス404を返す", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 
@@ -107,7 +116,7 @@ func TestServerGetAnnouncement(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 
-		t.Run("GetAnnouncementFnが設定されているとき、そのFnにint64にパースした値のannouncementIdとlangクエリパラメータの値が渡る", func(t *testing.T) {
+		t.Run("お知らせ詳細を返す処理を設定しているとき、その処理にint64へパースしたannouncementIdの値とlangクエリパラメータの値が渡る", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			var gotID int64
@@ -125,7 +134,7 @@ func TestServerGetAnnouncement(t *testing.T) {
 			assert.Equal(t, "en", gotLang)
 		})
 
-		t.Run("GetAnnouncementFnが設定されているとき、その戻り値のステータスと本文がそのまま応答になる", func(t *testing.T) {
+		t.Run("お知らせ詳細を返す処理を設定しているとき、その処理の戻り値のステータスと本文がそのまま応答になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.GetAnnouncementFn = func(announcementID int64, lang string) (int, any) {
@@ -142,7 +151,7 @@ func TestServerGetAnnouncement(t *testing.T) {
 			assert.JSONEq(t, `{"custom":"value"}`, string(body))
 		})
 
-		t.Run("GetAnnouncementFnの戻り値の本文がnilのとき、応答本文は空になる", func(t *testing.T) {
+		t.Run("お知らせ詳細を返す処理の戻り値の本文がnilのとき、応答本文は空になる", func(t *testing.T) {
 			srv := apisupportserverfake.NewServer()
 			defer srv.Close()
 			srv.GetAnnouncementFn = func(announcementID int64, lang string) (int, any) {

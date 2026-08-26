@@ -42,7 +42,7 @@ func TestFromEnv(t *testing.T) {
 
 		tests := []testCase{
 			{
-				name: "ENVがlocalのとき、設定が構築され、Envフィールドにlocalが反映される",
+				name: "ENVがlocalのとき、設定が構築され、動作環境の設定値はlocalになる",
 				arrange: func(t *testing.T) {
 					setBaselineEnv(t)
 					t.Setenv("ENV", "local")
@@ -53,7 +53,7 @@ func TestFromEnv(t *testing.T) {
 				},
 			},
 			{
-				name: "ENVがstagingのとき、設定が構築され、Envフィールドにstagingが反映される",
+				name: "ENVがstagingのとき、設定が構築され、動作環境の設定値はstagingになる",
 				arrange: func(t *testing.T) {
 					setBaselineEnv(t)
 					t.Setenv("ENV", "staging")
@@ -64,7 +64,7 @@ func TestFromEnv(t *testing.T) {
 				},
 			},
 			{
-				name: "ENVがproductionのとき、設定が構築され、Envフィールドにproductionが反映される",
+				name: "ENVがproductionのとき、設定が構築され、動作環境の設定値はproductionになる",
 				arrange: func(t *testing.T) {
 					setBaselineEnv(t)
 					t.Setenv("ENV", "production")

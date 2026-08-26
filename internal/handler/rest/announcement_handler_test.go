@@ -169,7 +169,7 @@ func TestGetDetail(t *testing.T) {
 			assert.JSONEq(t, `{"error":"announcement: unsupported lang"}`, w.Body.String())
 		})
 
-		t.Run("お知らせ取得ポートがannouncement.ErrNotFoundを返すとき、ステータス404と本文{\"error\":\"announcement: not found\"}を返す", func(t *testing.T) {
+		t.Run("お知らせ取得ポートがport.ErrNotFoundを返すとき、ステータス404と本文{\"error\":\"announcement: not found\"}を返す", func(t *testing.T) {
 			querier := &port.MockAnnouncementRepo{
 				GetPublishedDetailFn: func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
 					return nil, port.ErrNotFound
