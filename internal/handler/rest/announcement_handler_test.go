@@ -10,256 +10,297 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 
 	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
+	"github.com/kenyamaneko/overload-party-support/internal/router"
 	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
-	apisupport "github.com/kenyamaneko/overload-party-support/packages/api-support"
 )
 
-func newAnnouncementEngine(h *rest.AnnouncementHandler) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.GET("/api/v1/support/announcements", h.List)
-	r.GET("/api/v1/support/announcements/:announcementId", h.GetDetail)
-	return r
+var errFromQuerier = errors.New("querier: boom")
+
+// seedPublishedAnnouncement は実DBに公開中のお知らせを1件登録し、announcement_idを返す。
+func seedPublishedAnnouncement(t *testing.T, lang, title, body string) int64 {
+	t.Helper()
+	publishedAt := time.Now().Add(-1 * time.Hour)
+
+	var id int64
+	err := pg.Pool.QueryRow(context.Background(),
+		`INSERT INTO support.announcements (type, published_at) VALUES ($1, $2) RETURNING announcement_id`,
+		domain.TypeInfo, publishedAt,
+	).Scan(&id)
+	require.NoError(t, err)
+
+	_, err = pg.Pool.Exec(context.Background(),
+		`INSERT INTO support.announcement_translations (announcement_id, lang, title, body) VALUES ($1, $2, $3, $4)`,
+		id, lang, title, body,
+	)
+	require.NoError(t, err)
+
+	return id
 }
 
-func TestAnnouncementList(t *testing.T) {
-	t.Run("公開告知一覧API", func(t *testing.T) {
-		cases := []struct {
-			name       string
-			query      string
-			wantStatus int
+func TestList(t *testing.T) {
+	t.Run("[公開お知らせAPI]お知らせ一覧の取得", func(t *testing.T) {
+		validationTests := []struct {
+			name     string
+			url      string
+			wantBody string
 		}{
 			{
-				name:       "lang=jaのとき、200になる",
-				query:      "?lang=ja",
-				wantStatus: http.StatusOK,
+				name:     "langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す",
+				url:      "/api/v1/support/announcements",
+				wantBody: `{"error":"announcement: lang is required"}`,
 			},
 			{
-				name:       "lang=enのとき、200になる",
-				query:      "?lang=en",
-				wantStatus: http.StatusOK,
-			},
-			{
-				name:       "langが欠落するとき、400になる",
-				query:      "",
-				wantStatus: http.StatusBadRequest,
-			},
-			{
-				name:       "langが対応外 (fr)のとき、400になる",
-				query:      "?lang=fr",
-				wantStatus: http.StatusBadRequest,
+				name:     "langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す",
+				url:      "/api/v1/support/announcements?lang=fr",
+				wantBody: `{"error":"announcement: unsupported lang"}`,
 			},
 		}
+		for _, tt := range validationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
 
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := &port.MockAnnouncementRepo{
-					ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
-						return []domain.AnnouncementSummary{}, nil
-					},
-				}
-				h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
-
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements"+tc.query, nil)
 				w := httptest.NewRecorder()
-				newAnnouncementEngine(h).ServeHTTP(w, req)
+				req := httptest.NewRequest("GET", tt.url, nil)
+				r.ServeHTTP(w, req)
 
-				assert.Equal(t, tc.wantStatus, w.Code)
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.JSONEq(t, tt.wantBody, w.Body.String())
 			})
 		}
 
-		t.Run("0件でもnullでなく空配列を返す", func(t *testing.T) {
-			repo := &port.MockAnnouncementRepo{
-				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
+		t.Run("お知らせ取得ポートが想定外のエラーを返すとき、ステータス500を返す", func(t *testing.T) {
+			querier := &port.MockAnnouncementRepo{
+				ListPublishedFn: func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
+					return nil, errFromQuerier
+				},
+			}
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+		})
+
+		t.Run("お知らせ取得ポートが結果としてnil(該当なし)を返すとき、応答本文のannouncementsはnullでなく空配列になる", func(t *testing.T) {
+			querier := &port.MockAnnouncementRepo{
+				ListPublishedFn: func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
 					return nil, nil
 				},
 			}
-			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements?lang=ja", nil)
 			w := httptest.NewRecorder()
-			newAnnouncementEngine(h).ServeHTTP(w, req)
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
+			r.ServeHTTP(w, req)
 
-			require.Equal(t, http.StatusOK, w.Code)
-			var resp apisupport.AnnouncementListResponse
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-			assert.NotNil(t, resp.Announcements)
-			assert.Empty(t, resp.Announcements)
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.JSONEq(t, `{"announcements":[]}`, w.Body.String())
 		})
 
-		t.Run("各告知の項目が応答に反映される", func(t *testing.T) {
-			pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
-			repo := &port.MockAnnouncementRepo{
-				ListPublishedFn: func(_ context.Context, _ string, _ time.Time) ([]domain.AnnouncementSummary, error) {
-					return []domain.AnnouncementSummary{
-						{AnnouncementID: 1, Type: domain.TypeInfo, Title: "一件目", PublishedAt: pub},
-						{AnnouncementID: 2, Type: domain.TypeMaintenance, Title: "二件目", PublishedAt: pub},
-					}, nil
+		t.Run("取得結果が複数件あるとき、応答本文のannouncementsの各要素にannouncement_id・type・title・published_atが取得結果のとおり反映される", func(t *testing.T) {
+			publishedAt1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			publishedAt2 := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+			want := []domain.AnnouncementSummary{
+				{AnnouncementID: 1, Type: domain.TypeInfo, Title: "お知らせ1", PublishedAt: publishedAt1},
+				{AnnouncementID: 2, Type: domain.TypeEvent, Title: "お知らせ2", PublishedAt: publishedAt2},
+			}
+			querier := &port.MockAnnouncementRepo{
+				ListPublishedFn: func(ctx context.Context, lang string, now time.Time) ([]domain.AnnouncementSummary, error) {
+					return want, nil
 				},
 			}
-			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements?lang=ja", nil)
 			w := httptest.NewRecorder()
-			newAnnouncementEngine(h).ServeHTTP(w, req)
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements?lang=ja", nil)
+			r.ServeHTTP(w, req)
 
 			require.Equal(t, http.StatusOK, w.Code)
-			var resp apisupport.AnnouncementListResponse
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-			want := []apisupport.AnnouncementSummary{
-				{AnnouncementID: 1, Type: apisupport.AnnouncementTypeInfo, Title: "一件目", PublishedAt: pub},
-				{AnnouncementID: 2, Type: apisupport.AnnouncementTypeMaintenance, Title: "二件目", PublishedAt: pub},
-			}
-			assert.Equal(t, want, resp.Announcements)
+			var body apisupport.AnnouncementListResponse
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			require.Len(t, body.Announcements, 2)
+			assert.Equal(t, int64(1), body.Announcements[0].AnnouncementID)
+			assert.Equal(t, apisupport.AnnouncementTypeInfo, body.Announcements[0].Type)
+			assert.Equal(t, "お知らせ1", body.Announcements[0].Title)
+			assert.True(t, publishedAt1.Equal(body.Announcements[0].PublishedAt))
+			assert.Equal(t, int64(2), body.Announcements[1].AnnouncementID)
+			assert.Equal(t, apisupport.AnnouncementTypeEvent, body.Announcements[1].Type)
+			assert.Equal(t, "お知らせ2", body.Announcements[1].Title)
+			assert.True(t, publishedAt2.Equal(body.Announcements[1].PublishedAt))
 		})
 	})
 }
 
-func TestAnnouncementGetDetail(t *testing.T) {
-	t.Run("公開告知詳細API", func(t *testing.T) {
-		pub := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
-
-		fieldCases := []struct {
-			name   string
-			detail *domain.AnnouncementDetail
-			want   apisupport.AnnouncementDetail
+func TestGetDetail(t *testing.T) {
+	t.Run("[公開お知らせAPI]お知らせ詳細の取得", func(t *testing.T) {
+		validationTests := []struct {
+			name     string
+			url      string
+			wantCode int
+			wantBody string
 		}{
 			{
-				name:   "published_atありのとき、全フィールドがwireへ透過される",
-				detail: &domain.AnnouncementDetail{AnnouncementID: 7, Type: domain.TypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
-				want:   apisupport.AnnouncementDetail{AnnouncementID: 7, Type: apisupport.AnnouncementTypeMaintenance, Title: "メンテ", Body: "本文", PublishedAt: &pub},
+				name:     "announcementIdが数値としてパースできない値のとき、ステータス404と本文{\"error\":\"announcement not found\"}を返す",
+				url:      "/api/v1/support/announcements/abc?lang=ja",
+				wantCode: http.StatusNotFound,
+				wantBody: `{"error":"announcement not found"}`,
 			},
 			{
-				name:   "published_atなしのとき、published_atはnullで透過される",
-				detail: &domain.AnnouncementDetail{AnnouncementID: 8, Type: domain.TypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
-				want:   apisupport.AnnouncementDetail{AnnouncementID: 8, Type: apisupport.AnnouncementTypeInfo, Title: "案内", Body: "本文", PublishedAt: nil},
+				name:     "langクエリパラメータが無いとき、ステータス400と本文{\"error\":\"announcement: lang is required\"}を返す",
+				url:      "/api/v1/support/announcements/1",
+				wantCode: http.StatusBadRequest,
+				wantBody: `{"error":"announcement: lang is required"}`,
+			},
+			{
+				name:     "langクエリパラメータが対応外の値のとき、ステータス400と本文{\"error\":\"announcement: unsupported lang\"}を返す",
+				url:      "/api/v1/support/announcements/1?lang=fr",
+				wantCode: http.StatusBadRequest,
+				wantBody: `{"error":"announcement: unsupported lang"}`,
 			},
 		}
+		for _, tt := range validationTests {
+			t.Run(tt.name, func(t *testing.T) {
+				r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(&port.MockAnnouncementRepo{}, time.Now)))
 
-		for _, tc := range fieldCases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := &port.MockAnnouncementRepo{
-					GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
-						return tc.detail, nil
-					},
-				}
-				h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
-
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/1?lang=ja", nil)
 				w := httptest.NewRecorder()
-				newAnnouncementEngine(h).ServeHTTP(w, req)
+				req := httptest.NewRequest("GET", tt.url, nil)
+				r.ServeHTTP(w, req)
 
-				require.Equal(t, http.StatusOK, w.Code)
-				var resp apisupport.AnnouncementDetail
-				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, tc.want, resp)
+				assert.Equal(t, tt.wantCode, w.Code)
+				assert.JSONEq(t, tt.wantBody, w.Body.String())
 			})
 		}
 
-		dbErr := errors.New("db lost")
+		t.Run("お知らせ取得ポートがport.ErrNotFoundを返すとき、ステータス404と本文{\"error\":\"announcement: not found\"}を返す", func(t *testing.T) {
+			querier := &port.MockAnnouncementRepo{
+				GetPublishedDetailFn: func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
+					return nil, port.ErrNotFound
+				},
+			}
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
 
-		statusCases := []struct {
-			name       string
-			id         string
-			query      string
-			repoErr    error
-			wantStatus int
-		}{
-			{
-				name:       "非数値IDのとき、404になる",
-				id:         "abc",
-				query:      "?lang=ja",
-				wantStatus: http.StatusNotFound,
-			},
-			{
-				name:       "DB障害のとき、500になる",
-				id:         "1",
-				query:      "?lang=ja",
-				repoErr:    dbErr,
-				wantStatus: http.StatusInternalServerError,
-			},
-			{
-				name:       "langが欠落するとき、400になる",
-				id:         "1",
-				query:      "",
-				wantStatus: http.StatusBadRequest,
-			},
-			{
-				name:       "langが対応外のとき、400になる",
-				id:         "1",
-				query:      "?lang=fr",
-				wantStatus: http.StatusBadRequest,
-			},
-		}
-
-		for _, tc := range statusCases {
-			t.Run(tc.name, func(t *testing.T) {
-				repo := &port.MockAnnouncementRepo{
-					GetPublishedDetailFn: func(_ context.Context, _ int64, _ string) (*domain.AnnouncementDetail, error) {
-						return nil, tc.repoErr
-					},
-				}
-				h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
-
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/"+tc.id+tc.query, nil)
-				w := httptest.NewRecorder()
-				newAnnouncementEngine(h).ServeHTTP(w, req)
-
-				assert.Equal(t, tc.wantStatus, w.Code)
-			})
-		}
-
-		t.Run("公開済みの告知が存在するIDを指定するとき、200で本体が返る", func(t *testing.T) {
-			sharedPG.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
-			ctx := context.Background()
-			past := time.Now().Add(-time.Hour)
-
-			var id int64
-			require.NoError(t, sharedPG.Pool.QueryRow(ctx,
-				`INSERT INTO support.announcements (type, published_at)
-				 VALUES ($1, $2)
-				 RETURNING announcement_id`,
-				domain.TypeInfo, past,
-			).Scan(&id))
-			_, err := sharedPG.Pool.Exec(ctx,
-				`INSERT INTO support.announcement_translations (announcement_id, lang, title, body)
-				 VALUES ($1, $2, $3, $4)`,
-				id, domain.LangJa, "実DBタイトル", "実DB本文",
-			)
-			require.NoError(t, err)
-
-			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
-			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/support/announcements/%d?lang=ja", id), nil)
 			w := httptest.NewRecorder()
-			newAnnouncementEngine(h).ServeHTTP(w, req)
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
+			r.ServeHTTP(w, req)
 
-			require.Equal(t, http.StatusOK, w.Code)
-			var resp apisupport.AnnouncementDetail
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-			require.Equal(t, id, resp.AnnouncementID)
-			require.Equal(t, "実DBタイトル", resp.Title)
-			require.Equal(t, "実DB本文", resp.Body)
+			assert.Equal(t, http.StatusNotFound, w.Code)
+			assert.JSONEq(t, `{"error":"announcement: not found"}`, w.Body.String())
 		})
 
-		t.Run("存在しないIDを指定するとき、404になる", func(t *testing.T) {
-			sharedPG.Truncate(t)
-			repo := postgres.NewAnnouncementRepository(sharedPG.Pool)
-			h := rest.NewAnnouncementHandler(announcement.New(repo, time.Now))
+		t.Run("お知らせ取得ポートが想定外のエラーを返すとき、ステータス500を返す", func(t *testing.T) {
+			querier := &port.MockAnnouncementRepo{
+				GetPublishedDetailFn: func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
+					return nil, errFromQuerier
+				},
+			}
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/support/announcements/999999?lang=ja", nil)
 			w := httptest.NewRecorder()
-			newAnnouncementEngine(h).ServeHTTP(w, req)
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
+			r.ServeHTTP(w, req)
 
-			require.Equal(t, http.StatusNotFound, w.Code)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+		})
+
+		t.Run("お知らせが取得できたとき、応答本文にannouncement_id・type・title・body・published_atが取得結果のとおり反映される", func(t *testing.T) {
+			publishedAt := time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC)
+			want := &domain.AnnouncementDetail{
+				AnnouncementID: 7,
+				Type:           domain.TypeMaintenance,
+				Title:          "メンテのお知らせ",
+				Body:           "本文です",
+				PublishedAt:    &publishedAt,
+			}
+			querier := &port.MockAnnouncementRepo{
+				GetPublishedDetailFn: func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
+					return want, nil
+				},
+			}
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements/7?lang=ja", nil)
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var body apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, int64(7), body.AnnouncementID)
+			assert.Equal(t, apisupport.AnnouncementTypeMaintenance, body.Type)
+			assert.Equal(t, "メンテのお知らせ", body.Title)
+			assert.Equal(t, "本文です", body.Body)
+			require.NotNil(t, body.PublishedAt)
+			assert.True(t, publishedAt.Equal(*body.PublishedAt))
+		})
+
+		t.Run("取得結果のpublished_atが未設定のとき、応答本文のpublished_atはnullになる", func(t *testing.T) {
+			want := &domain.AnnouncementDetail{
+				AnnouncementID: 8,
+				Type:           domain.TypeInfo,
+				Title:          "下書き",
+				Body:           "本文です",
+				PublishedAt:    nil,
+			}
+			querier := &port.MockAnnouncementRepo{
+				GetPublishedDetailFn: func(ctx context.Context, announcementID int64, lang string) (*domain.AnnouncementDetail, error) {
+					return want, nil
+				},
+			}
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements/8?lang=ja", nil)
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var body apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Nil(t, body.PublishedAt)
+		})
+	})
+}
+
+func TestAnnouncementEndToEnd(t *testing.T) {
+	t.Run("[公開お知らせAPI]エンドツーエンドの配線確認", func(t *testing.T) {
+		t.Run("実DBに公開条件を満たすお知らせを登録した状態でそのannouncementIdを指定すると、ステータス200でその内容が返る", func(t *testing.T) {
+			pg.Truncate(t)
+			id := seedPublishedAnnouncement(t, "ja", "実DBのお知らせ", "実DBの本文")
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(repo, time.Now)))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/support/announcements/%d?lang=ja", id), nil)
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var body apisupport.AnnouncementDetail
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+			assert.Equal(t, id, body.AnnouncementID)
+			assert.Equal(t, "実DBのお知らせ", body.Title)
+			assert.Equal(t, "実DBの本文", body.Body)
+		})
+
+		t.Run("実DBに存在しないannouncementIdを指定すると、ステータス404が返る", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			r := router.NewInternal(rest.NewAnnouncementHandler(announcement.New(repo, time.Now)))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/v1/support/announcements/1?lang=ja", nil)
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusNotFound, w.Code)
 		})
 	})
 }

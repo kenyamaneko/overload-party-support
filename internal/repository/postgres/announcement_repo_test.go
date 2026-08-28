@@ -6,284 +6,246 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kenyamaneko/overload-party-support/internal/domain"
 	"github.com/kenyamaneko/overload-party-support/internal/port"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres"
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres/postgrestest"
 )
 
-var sharedPG *postgrestest.Postgres
+var pg *postgrestest.Postgres
 
 func TestMain(m *testing.M) {
-	os.Exit(postgrestest.RunMain(m, &sharedPG))
+	os.Exit(postgrestest.RunMain(m, &pg))
 }
 
-var fixedNow = time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
-
-// newAnnouncementRepo は共有 Postgres を TRUNCATE した上で repo を生成する。
-func newAnnouncementRepo(t *testing.T) *postgres.AnnouncementRepository {
+// insertAnnouncement は support.announcements に1行挿入し、生成された announcement_id を返す。
+func insertAnnouncement(t *testing.T, pool *pgxpool.Pool, announcementType string, publishedAt, expiresAt *time.Time) int64 {
 	t.Helper()
-	sharedPG.Truncate(t)
-	return postgres.NewAnnouncementRepository(sharedPG.Pool)
-}
-
-// translationSeed は SQL 直挿しフィクスチャの翻訳 1 件分。
-type translationSeed struct {
-	lang  string
-	title string
-	body  string
-}
-
-// jaSeed は ja 1 件のみの翻訳シード (多くの seed で使うのでヘルパー化)。
-func jaSeed(title, body string) []translationSeed {
-	return []translationSeed{{lang: domain.LangJa, title: title, body: body}}
-}
-
-// insertAnnouncement は support.announcements + announcement_translations へ直接 INSERT し、採番された announcement_id を返す。
-func insertAnnouncement(t *testing.T, typ string, publishedAt, expiresAt *time.Time, translations []translationSeed) int64 {
-	t.Helper()
-	ctx := context.Background()
-
 	var id int64
-	require.NoError(t, sharedPG.Pool.QueryRow(ctx,
-		`INSERT INTO support.announcements (type, published_at, expires_at)
-		 VALUES ($1, $2, $3)
-		 RETURNING announcement_id`,
-		typ, publishedAt, expiresAt,
-	).Scan(&id))
-
-	for _, tr := range translations {
-		_, err := sharedPG.Pool.Exec(ctx,
-			`INSERT INTO support.announcement_translations (announcement_id, lang, title, body)
-			 VALUES ($1, $2, $3, $4)`,
-			id, tr.lang, tr.title, tr.body,
-		)
-		require.NoError(t, err)
-	}
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO support.announcements (type, published_at, expires_at) VALUES ($1, $2, $3) RETURNING announcement_id`,
+		announcementType, publishedAt, expiresAt,
+	).Scan(&id)
+	require.NoError(t, err)
 	return id
 }
 
-// announcementSeed は複数件を一括で INSERT するときの 1 件分。
-type announcementSeed struct {
-	typ          string
-	publishedAt  *time.Time
-	expiresAt    *time.Time
-	translations []translationSeed
+// insertTranslation は support.announcement_translations に指定langの翻訳行を挿入する。
+func insertTranslation(t *testing.T, pool *pgxpool.Pool, announcementID int64, lang, title, body string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO support.announcement_translations (announcement_id, lang, title, body) VALUES ($1, $2, $3, $4)`,
+		announcementID, lang, title, body,
+	)
+	require.NoError(t, err)
 }
 
 func TestListPublished(t *testing.T) {
-	t.Run("公開告知一覧の取得", func(t *testing.T) {
-		t.Run("公開条件を満たす行だけがlang別に返る", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
+	t.Run("[お知らせリポジトリ]公開中お知らせ一覧の取得", func(t *testing.T) {
+		now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+		past := now.Add(-1 * time.Hour)
+		future := now.Add(1 * time.Hour)
 
-			past := fixedNow.Add(-24 * time.Hour)
-			future := fixedNow.Add(24 * time.Hour)
-			farPast := fixedNow.Add(-48 * time.Hour)
+		inclusionTests := []struct {
+			name        string
+			publishedAt *time.Time
+			expiresAt   *time.Time
+		}{
+			{
+				name:        "公開日時が現在時刻以前で、かつ期限日時が現在時刻より後で、指定langの翻訳が存在する行が結果に含まれる",
+				publishedAt: &past,
+				expiresAt:   &future,
+			},
+			{
+				name:        "期限日時が未設定の行は、期限切れとして除外されない",
+				publishedAt: &past,
+				expiresAt:   nil,
+			},
+			{
+				name:        "公開日時が現在時刻と同時刻の行は結果に含まれる",
+				publishedAt: &now,
+				expiresAt:   nil,
+			},
+		}
+		for _, tt := range inclusionTests {
+			t.Run(tt.name, func(t *testing.T) {
+				pg.Truncate(t)
+				repo := postgres.NewAnnouncementRepository(pg.Pool)
+				id := insertAnnouncement(t, pg.Pool, "info", tt.publishedAt, tt.expiresAt)
+				insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
 
-			seeds := []announcementSeed{
-				{
-					typ:         domain.TypeInfo,
-					publishedAt: &past,
-					translations: []translationSeed{
-						{lang: domain.LangJa, title: "published_at<=now (ja+en)", body: "B"},
-						{lang: domain.LangEn, title: "published_at<=now (ja+en) [en]", body: "B-en"},
-					},
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  nil,
-					translations: jaSeed("published_at=NULL", "B"),
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  &future,
-					translations: jaSeed("published_at>now", "B"),
-				},
-				{
-					typ:          domain.TypeEvent,
-					publishedAt:  &farPast,
-					expiresAt:    &past,
-					translations: jaSeed("expires_at<=now", "B"),
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  &past,
-					expiresAt:    &future,
-					translations: jaSeed("expires_at>now", "B"),
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  &past,
-					translations: jaSeed("published_at<=now (ja only)", "B"),
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  &fixedNow,
-					translations: jaSeed("published_at==now", "B"),
-				},
-				{
-					typ:          domain.TypeInfo,
-					publishedAt:  &farPast,
-					expiresAt:    &fixedNow,
-					translations: jaSeed("expires_at==now", "B"),
-				},
-			}
-			for _, s := range seeds {
-				insertAnnouncement(t, s.typ, s.publishedAt, s.expiresAt, s.translations)
-			}
+				got, err := repo.ListPublished(context.Background(), "ja", now)
 
-			cases := []struct {
-				name       string
-				lang       string
-				wantTitles []string
-			}{
-				{
-					name: "lang=jaのとき、公開条件を満たす行 (ja+en行 / ja only行 / expires_at>now行 / published_at==now行)を返す (expires_at==nowは含まない)",
-					lang: domain.LangJa,
-					wantTitles: []string{
-						"published_at<=now (ja+en)",
-						"published_at<=now (ja only)",
-						"expires_at>now",
-						"published_at==now",
-					},
-				},
-				{
-					name: "lang=enのとき、公開条件を満たしen翻訳もある1件のみ返す",
-					lang: domain.LangEn,
-					wantTitles: []string{
-						"published_at<=now (ja+en) [en]",
-					},
-				},
-			}
+				require.NoError(t, err)
+				require.Len(t, got, 1)
+				assert.Equal(t, id, got[0].AnnouncementID)
+			})
+		}
 
-			for _, tc := range cases {
-				t.Run(tc.name, func(t *testing.T) {
-					items, err := repo.ListPublished(ctx, tc.lang, fixedNow)
-					require.NoError(t, err)
+		exclusionTests := []struct {
+			name            string
+			publishedAt     *time.Time
+			expiresAt       *time.Time
+			translationLang string
+		}{
+			{
+				name:            "公開日時が未設定の行は結果に含まれない",
+				publishedAt:     nil,
+				expiresAt:       nil,
+				translationLang: "ja",
+			},
+			{
+				name:            "公開日時が現在時刻より後(公開前)の行は結果に含まれない",
+				publishedAt:     &future,
+				expiresAt:       nil,
+				translationLang: "ja",
+			},
+			{
+				name:            "期限日時が現在時刻以前(期限日時と現在時刻が同時刻の場合を含む)の行は結果に含まれない",
+				publishedAt:     &past,
+				expiresAt:       &now,
+				translationLang: "ja",
+			},
+			{
+				name:            "指定langの翻訳が存在しない行は結果に含まれない(他langの翻訳しかない行は対象外になる)",
+				publishedAt:     &past,
+				expiresAt:       nil,
+				translationLang: "en",
+			},
+		}
+		for _, tt := range exclusionTests {
+			t.Run(tt.name, func(t *testing.T) {
+				pg.Truncate(t)
+				repo := postgres.NewAnnouncementRepository(pg.Pool)
+				id := insertAnnouncement(t, pg.Pool, "info", tt.publishedAt, tt.expiresAt)
+				insertTranslation(t, pg.Pool, id, tt.translationLang, "タイトル", "本文")
 
-					titles := make([]string, 0, len(items))
-					for _, it := range items {
-						titles = append(titles, it.Title)
-					}
-					assert.ElementsMatch(t, tc.wantTitles, titles)
-				})
-			}
+				got, err := repo.ListPublished(context.Background(), "ja", now)
+
+				require.NoError(t, err)
+				assert.Empty(t, got)
+			})
+		}
+
+		t.Run("公開条件を満たす行が複数あるとき、公開日時の降順で並ぶ", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			older := now.Add(-2 * time.Hour)
+			newer := now.Add(-1 * time.Hour)
+			olderID := insertAnnouncement(t, pg.Pool, "info", &older, nil)
+			insertTranslation(t, pg.Pool, olderID, "ja", "古い", "本文")
+			newerID := insertAnnouncement(t, pg.Pool, "info", &newer, nil)
+			insertTranslation(t, pg.Pool, newerID, "ja", "新しい", "本文")
+
+			got, err := repo.ListPublished(context.Background(), "ja", now)
+
+			require.NoError(t, err)
+			require.Len(t, got, 2)
+			assert.Equal(t, []int64{newerID, olderID}, []int64{got[0].AnnouncementID, got[1].AnnouncementID})
 		})
 
-		t.Run("空DBのとき、nilでなく長さ0のsliceを返す", func(t *testing.T) {
-			// 呼び出し側が range できる契約のため、空でも nil を返さない。
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
+		t.Run("公開日時が同じ行同士は、announcement_idの降順で並ぶ", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			firstID := insertAnnouncement(t, pg.Pool, "info", &past, nil)
+			insertTranslation(t, pg.Pool, firstID, "ja", "先に登録", "本文")
+			secondID := insertAnnouncement(t, pg.Pool, "info", &past, nil)
+			insertTranslation(t, pg.Pool, secondID, "ja", "後に登録", "本文")
 
-			items, err := repo.ListPublished(ctx, domain.LangJa, fixedNow)
+			got, err := repo.ListPublished(context.Background(), "ja", now)
+
 			require.NoError(t, err)
-			assert.Empty(t, items)
+			require.Len(t, got, 2)
+			assert.Equal(t, []int64{secondID, firstID}, []int64{got[0].AnnouncementID, got[1].AnnouncementID})
 		})
 
-		t.Run("published_at DESC・announcement_id DESCで並ぶ", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
+		t.Run("該当する行が無いとき、要素数0の結果を返す", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
 
-			t1 := fixedNow.Add(-3 * time.Hour)
-			t2 := fixedNow.Add(-2 * time.Hour)
-			t3 := fixedNow.Add(-1 * time.Hour)
+			got, err := repo.ListPublished(context.Background(), "ja", now)
 
-			id1a := insertAnnouncement(t, domain.TypeInfo, &t1, nil, jaSeed("1a", "B"))
-			id1b := insertAnnouncement(t, domain.TypeInfo, &t1, nil, jaSeed("1b", "B"))
-			id2 := insertAnnouncement(t, domain.TypeInfo, &t2, nil, jaSeed("2", "B"))
-			id3 := insertAnnouncement(t, domain.TypeInfo, &t3, nil, jaSeed("3", "B"))
-
-			items, err := repo.ListPublished(ctx, domain.LangJa, fixedNow)
 			require.NoError(t, err)
-			require.Len(t, items, 4)
-
-			gotIDs := []int64{items[0].AnnouncementID, items[1].AnnouncementID, items[2].AnnouncementID, items[3].AnnouncementID}
-			assert.Equal(t, []int64{id3, id2, id1b, id1a}, gotIDs)
+			assert.Empty(t, got)
 		})
 	})
 }
 
 func TestGetPublishedDetail(t *testing.T) {
-	t.Run("公開告知詳細の取得", func(t *testing.T) {
-		t.Run("published_atの値に依存せず翻訳行があれば返る", func(t *testing.T) {
-			// 公開期間外でもアクセス可 (published_at に依存しない)。
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
+	t.Run("[お知らせリポジトリ]お知らせ詳細の取得", func(t *testing.T) {
+		now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+		past := now.Add(-1 * time.Hour)
+		future := now.Add(1 * time.Hour)
 
-			past := fixedNow.Add(-time.Hour)
-			future := fixedNow.Add(time.Hour)
+		t.Run("指定announcementIdの行に指定langの翻訳が存在するとき、公開日時が未設定(下書き)でも取得できる", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", nil, nil)
+			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
 
-			pastID := insertAnnouncement(t, domain.TypeInfo, &past, nil, jaSeed("past", "B-past"))
-			nullID := insertAnnouncement(t, domain.TypeInfo, nil, nil, jaSeed("null", "B-null"))
-			futureID := insertAnnouncement(t, domain.TypeInfo, &future, nil, jaSeed("future", "B-future"))
+			got, err := repo.GetPublishedDetail(context.Background(), id, "ja")
 
-			cases := []struct {
-				name     string
-				id       int64
-				wantBody string
-			}{
-				{
-					name:     "published_at<=nowのとき、bodyを返す",
-					id:       pastID,
-					wantBody: "B-past",
-				},
-				{
-					name:     "published_at=NULLのとき、bodyを返す",
-					id:       nullID,
-					wantBody: "B-null",
-				},
-				{
-					name:     "published_at>nowのとき、bodyを返す",
-					id:       futureID,
-					wantBody: "B-future",
-				},
-			}
-
-			for _, tc := range cases {
-				t.Run(tc.name, func(t *testing.T) {
-					detail, err := repo.GetPublishedDetail(ctx, tc.id, domain.LangJa)
-					require.NoError(t, err)
-					require.NotNil(t, detail)
-					assert.Equal(t, tc.wantBody, detail.Body)
-				})
-			}
+			require.NoError(t, err)
+			assert.Equal(t, id, got.AnnouncementID)
 		})
 
-		t.Run("対象が無いとき、ErrNotFoundになりdetailはnil", func(t *testing.T) {
-			repo := newAnnouncementRepo(t)
-			ctx := context.Background()
+		t.Run("指定announcementIdの行に指定langの翻訳が存在するとき、公開日時が現在時刻より後(公開前)でも取得できる", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", &future, nil)
+			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
 
-			past := fixedNow.Add(-time.Hour)
-			jaOnlyID := insertAnnouncement(t, domain.TypeInfo, &past, nil, jaSeed("ja only", "B"))
+			got, err := repo.GetPublishedDetail(context.Background(), id, "ja")
 
-			cases := []struct {
-				name string
-				id   int64
-				lang string
-			}{
-				{
-					name: "指定langの翻訳行が無い (jaのみ存在する行にenで問い合わせ)とき、ErrNotFoundになる",
-					id:   jaOnlyID,
-					lang: domain.LangEn,
-				},
-				{
-					name: "announcement_idの行が無いとき、ErrNotFoundになる",
-					id:   999999,
-					lang: domain.LangJa,
-				},
-			}
+			require.NoError(t, err)
+			assert.Equal(t, id, got.AnnouncementID)
+		})
 
-			for _, tc := range cases {
-				t.Run(tc.name, func(t *testing.T) {
-					detail, err := repo.GetPublishedDetail(ctx, tc.id, tc.lang)
-					assert.ErrorIs(t, err, port.ErrNotFound)
-					assert.Nil(t, detail)
-				})
-			}
+		t.Run("指定announcementIdの行に指定langの翻訳が存在するとき、公開日時が現在時刻以前(公開中)でも取得できる", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", &past, nil)
+			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
+
+			got, err := repo.GetPublishedDetail(context.Background(), id, "ja")
+
+			require.NoError(t, err)
+			assert.Equal(t, id, got.AnnouncementID)
+		})
+
+		t.Run("指定announcementIdの行に指定langの翻訳が存在するとき、期限日時が現在時刻以前(期限切れ)でも取得できる", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", &past, &past)
+			insertTranslation(t, pg.Pool, id, "ja", "タイトル", "本文")
+
+			got, err := repo.GetPublishedDetail(context.Background(), id, "ja")
+
+			require.NoError(t, err)
+			assert.Equal(t, id, got.AnnouncementID)
+		})
+
+		t.Run("指定announcementIdの行が存在しないとき、port.ErrNotFoundを返す", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+
+			_, err := repo.GetPublishedDetail(context.Background(), 1, "ja")
+
+			assert.ErrorIs(t, err, port.ErrNotFound)
+		})
+
+		t.Run("指定announcementIdの行は存在するが指定langの翻訳が存在しないとき、port.ErrNotFoundを返す", func(t *testing.T) {
+			pg.Truncate(t)
+			repo := postgres.NewAnnouncementRepository(pg.Pool)
+			id := insertAnnouncement(t, pg.Pool, "info", &past, nil)
+			insertTranslation(t, pg.Pool, id, "en", "title", "body")
+
+			_, err := repo.GetPublishedDetail(context.Background(), id, "ja")
+
+			assert.ErrorIs(t, err, port.ErrNotFound)
 		})
 	})
 }

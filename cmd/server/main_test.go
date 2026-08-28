@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -10,45 +11,111 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kenyamaneko/overload-party-support/internal/domain"
-	"github.com/kenyamaneko/overload-party-support/internal/handler/rest"
-	"github.com/kenyamaneko/overload-party-support/internal/port"
-	"github.com/kenyamaneko/overload-party-support/internal/router"
-	"github.com/kenyamaneko/overload-party-support/internal/usecase/announcement"
+	"github.com/kenyamaneko/overload-party-support/internal/config"
 )
 
-func TestServe(t *testing.T) {
-	t.Run("gateway向け内部APIサーバの起動と停止", func(t *testing.T) {
-		t.Run("起動中はお知らせ一覧の取得が200を返し、停止要求で終了する", func(t *testing.T) {
-			ln, err := net.Listen("tcp", "127.0.0.1:0")
-			require.NoError(t, err)
+func TestSetupLogger(t *testing.T) {
+	t.Run("[プロセス起動]ログ設定の構築", func(t *testing.T) {
+		validEnvs := []struct {
+			name string
+			env  config.Env
+		}{
+			{
+				name: "動作環境がlocalのとき、エラーにならない",
+				env:  config.EnvLocal,
+			},
+			{
+				name: "動作環境がstagingのとき、エラーにならない",
+				env:  config.EnvStaging,
+			},
+			{
+				name: "動作環境がproductionのとき、エラーにならない",
+				env:  config.EnvProduction,
+			},
+		}
+		for _, tt := range validEnvs {
+			t.Run(tt.name, func(t *testing.T) {
+				assert.NoError(t, setupLogger(tt.env))
+			})
+		}
 
-			srv := &http.Server{
-				Handler:           newInternalRouterWithStubs(),
-				ReadHeaderTimeout: 10 * time.Second,
-			}
-			ctx, cancel := context.WithCancel(context.Background())
-			served := make(chan error, 1)
-			go func() { served <- serve(ctx, srv, ln) }()
-
-			client := &http.Client{Timeout: 5 * time.Second}
-			resp, err := client.Get("http://" + ln.Addr().String() + "/api/v1/support/announcements?lang=ja")
-			require.NoError(t, err)
-			defer func() { _ = resp.Body.Close() }()
-			assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-			cancel()
-			require.NoError(t, <-served)
+		t.Run("動作環境がlocal・staging・productionのいずれでもない値invalidのとき、エラーになる", func(t *testing.T) {
+			assert.Error(t, setupLogger(config.Env("invalid")))
 		})
 	})
 }
 
-// newInternalRouterWithStubs はお知らせなしを返す repo で内部 API のルータを構築する。
-func newInternalRouterWithStubs() http.Handler {
-	querier := &port.MockAnnouncementRepo{
-		ListPublishedFn: func(context.Context, string, time.Time) ([]domain.AnnouncementSummary, error) {
-			return []domain.AnnouncementSummary{}, nil
-		},
-	}
-	return router.NewInternal(rest.NewAnnouncementHandler(announcement.New(querier, time.Now)))
+func TestServe(t *testing.T) {
+	t.Run("[プロセス起動]プロセスの待ち受けとgraceful shutdown", func(t *testing.T) {
+		t.Run("指定したリスナーで待ち受けを開始し、設定したハンドラがリクエストに応答する", func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			srv := &http.Server{
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte("serveテスト応答"))
+				}),
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			errCh := make(chan error, 1)
+			go func() { errCh <- serve(ctx, srv, ln) }()
+			t.Cleanup(func() {
+				cancel()
+				<-errCh
+			})
+
+			addr := "http://" + ln.Addr().String() + "/"
+			var body []byte
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				resp, getErr := http.Get(addr)
+				if !assert.NoError(collect, getErr) {
+					return
+				}
+				defer func() {
+					if closeErr := resp.Body.Close(); closeErr != nil {
+						collect.Errorf("resp.Body.Close(): %v", closeErr)
+					}
+				}()
+				if !assert.Equal(collect, http.StatusOK, resp.StatusCode) {
+					return
+				}
+				var readErr error
+				body, readErr = io.ReadAll(resp.Body)
+				assert.NoError(collect, readErr)
+			}, 2*time.Second, 10*time.Millisecond)
+
+			assert.Equal(t, "serveテスト応答", string(body))
+		})
+
+		t.Run("停止が指示されると、graceful shutdownを行いエラー無く終了する", func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			srv := &http.Server{
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				}),
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			errCh := make(chan error, 1)
+			go func() { errCh <- serve(ctx, srv, ln) }()
+
+			require.Eventually(t, func() bool {
+				conn, dialErr := net.Dial("tcp", ln.Addr().String())
+				if dialErr != nil {
+					return false
+				}
+				_ = conn.Close()
+				return true
+			}, 2*time.Second, 10*time.Millisecond)
+
+			cancel()
+
+			select {
+			case serveErr := <-errCh:
+				assert.NoError(t, serveErr)
+			case <-time.After(2 * time.Second):
+				t.Fatal("serveがctxキャンセル後も終了しない")
+			}
+		})
+	})
 }

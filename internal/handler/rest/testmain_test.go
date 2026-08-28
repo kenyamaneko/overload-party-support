@@ -7,8 +7,8 @@ import (
 	"github.com/kenyamaneko/overload-party-support/internal/repository/postgres/postgrestest"
 )
 
-var sharedPG *postgrestest.Postgres
+var pg *postgrestest.Postgres
 
 func TestMain(m *testing.M) {
-	os.Exit(postgrestest.RunMain(m, &sharedPG))
+	os.Exit(postgrestest.RunMain(m, &pg))
 }
